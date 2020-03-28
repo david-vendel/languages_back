@@ -30,7 +30,7 @@ const app = express();
 
 //bring in Models
 let Language = require("./models/language.js");
-// let User = require("./models/user.js");
+let User = require("./models/user.js");
 
 let current = "";
 
@@ -57,6 +57,103 @@ app.use(bodyParser.json());
 app.get("/", (req, res) => {
   res.send("Hello World");
   // res.sendFile(path.join(__dirname, "static", "index.html"));
+});
+
+app.post("/user-logged", (req, res) => {
+  console.log("req.body.auth", req.body.auth);
+  User.find({ auth: req.body.auth }, (err, answer) => {
+    if (err) {
+      console.log("login database lookup error");
+    } else {
+      console.log("answer ul", answer[0], typeof answer);
+      if (answer[0]) {
+        //authorized
+        res.status(200).send({ logged: true });
+      } else {
+        //unauthorized
+        res
+          .status(401) // HTTP status 404: Unauthorized
+          .send("Not logged in ");
+      }
+    }
+  });
+});
+
+app.post("/login", (req, res) => {
+  // console.log("login req", req);
+  const login = req.body;
+  // console.log("login", login, typeof login);
+  User.find(
+    { username: login.username, password: login.password },
+    (err, answer) => {
+      if (err) {
+        console.log("login database lookup error");
+      } else {
+        console.log("answer:", answer[0], typeof answer);
+        if (answer[0]) {
+          //authorized
+          current = login.username;
+          console.log("current user:", current);
+          const millis = Date.now();
+          const seconds = Math.floor(millis / 1000);
+          const random = Math.random();
+          const userToken = Math.floor(seconds * random);
+          User.updateOne(
+            { username: login.username },
+            { auth: userToken },
+            (err, res) => {
+              if (err) {
+                console.log("err", err);
+              } else {
+                console.log("res", res);
+              }
+            }
+          );
+
+          res.json({ success: true, userToken });
+        } else {
+          console.log("login failed");
+          //unauthorized
+          res
+            .status(401) // HTTP status 404: NotFound
+            .send("Login Failed");
+        }
+      }
+    }
+  );
+});
+
+// app.get("/logout", (req, res) => {
+//   current = "";
+//   console.log("logout");
+//   res.json({ success: true });
+// });
+
+app.post("/logout", (req, res) => {
+  console.log("logout req.body.auth", req.body.auth);
+  User.find({ auth: req.body.auth }, (err, answer) => {
+    if (err) {
+      console.log("logout database lookup error");
+    } else {
+      console.log("logout answer ul", answer[0], typeof answer);
+      if (answer[0]) {
+        //authorized
+        User.updateOne({ auth: req.body.auth }, { auth: 0 }, (err, res) => {
+          if (err) {
+            console.log("err", err);
+          } else {
+            console.log("res", res);
+          }
+        });
+        res.status(200).send({ loggedOut: true });
+      } else {
+        //unauthorized
+        res
+          .status(401) // HTTP status 404: Unauthorized
+          .send("Not logged out ");
+      }
+    }
+  });
 });
 
 readFile = (name, code) => {
