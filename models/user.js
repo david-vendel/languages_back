@@ -12,6 +12,10 @@ let userSchema = mongoose.Schema({
   auth: {
     type: String,
     required: true
+  },
+  languageTo: {
+    type: String,
+    require: false
   }
 });
 

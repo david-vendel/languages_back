@@ -313,32 +313,58 @@ const translateThisWord = async (id, word) => {
 
   console.log("translate", word);
 
-  try {
-    fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json"
-      }
-    })
-      .then(res => res.json())
-      .then(response => {
-        console.log("response from google: ", response);
-        console.log("return", response.data.translations[0].translatedText);
-
-        const translation = response.data.translations[0].translatedText;
+  Pair.find({ word: word }, (err, response) => {
+    if (err) {
+      console.log("err find pair", err);
+    } else {
+      console.log("find pair response", response);
+      if (Array.isArray(response) && response.length > 1) {
+        console.log("duplicities in pair translated");
+        Pair.deleteOne({ word: word }, (err, response) => {
+          if (err) {
+            console.log("error deleting one pair");
+          } else {
+            console.log("deleted one duplicit pair");
+          }
+        });
+      } else if (Array.isArray(response) && response.length === 1) {
+        console.log("exactly one translation already, I keep it");
+      } else {
         try {
-          Pair.create({ id: id, word: word, translation: translation });
+          fetch(url, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json"
+            }
+          })
+            .then(res => res.json())
+            .then(response => {
+              console.log("response from google: ", response);
+              console.log(
+                "return",
+                response.data.translations[0].translatedText
+              );
+
+              const translation = response.data.translations[0].translatedText;
+              try {
+                Pair.create({ id: id, word: word, translation: translation });
+              } catch (e) {
+                console.log("error", e);
+              }
+            })
+            .catch(error => {
+              console.log(
+                "There was an error with the translation request: ",
+                error
+              );
+            });
         } catch (e) {
-          console.log("error", e);
+          console.log("translateion e", e);
         }
-      })
-      .catch(error => {
-        console.log("There was an error with the translation request: ", error);
-      });
-  } catch (e) {
-    console.log("translateion e", e);
-  }
+      }
+    }
+  });
 };
 
 app.post("/frequencies/translate", (req, res) => {
@@ -354,6 +380,36 @@ app.post("/frequencies/translate", (req, res) => {
         const translation = translateThisWord(f.id, f.word);
       });
       res.send("TRANSLATED");
+    }
+  });
+});
+
+app.post("/setLanguageTo", (req, res) => {
+  console.log("setLanguageTo", req.body.languageTo, req.body.auth);
+  User.updateOne(
+    { auth: req.body.auth },
+    { languageTo: req.body.languageTo },
+    (err, suc) => {
+      if (err) {
+        console.log("err", err);
+        res.send("LANGUAGE_TO_FAIL_AUTH_FIND");
+      } else {
+        console.log("LANGUAGE_TO_SUCCESS");
+        res.send("LANGUAGE_TO_SUCCESS");
+      }
+    }
+  );
+});
+
+app.post("/getLanguageTo", (req, res) => {
+  console.log("getLanguageTo", req.body.auth);
+  User.findOne({ auth: req.body.auth }, (err, suc) => {
+    if (err) {
+      console.log("err", err);
+      res.send("LANGUAGE_TO_FAIL_AUTH_FIND");
+    } else {
+      console.log("LANGUAGE_TO_SUCCESS", suc);
+      res.send({ message: "LANGUAGE_TO_SUCCESS", languageTo: suc.languageTo });
     }
   });
 });
