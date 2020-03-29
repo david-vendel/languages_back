@@ -31,6 +31,7 @@ const app = express();
 //bring in Models
 let Language = require("./models/language.js");
 let User = require("./models/user.js");
+let Frequent = require("./models/frequent.js");
 
 let current = "";
 
@@ -185,7 +186,7 @@ readFile = (name, code) => {
 app.get("/get/:id", (req, res) => {
   console.log("app get", req.params);
 
-  fs.readFile("./../translator/100t.txt", "utf8", (err, file) => {
+  fs.readFile("./translator/100t.txt", "utf8", (err, file) => {
     if (err) {
       console.log(err);
     } else {
@@ -280,6 +281,54 @@ app.post("/languages/delete/:word", (req, res) => {
       res.send("DELETED_SUCCESSFULLY");
     }
   });
+});
+
+app.post("/frequency/add", (req, res) => {
+  console.log("freq add", req.body.id, req.body.word);
+  try {
+    Frequent.create({
+      id: req.body.id,
+      word: req.body.word
+    });
+    console.log("frequency added");
+    res.send("FREQUENCY_ADD_SUCCESS");
+  } catch (e) {
+    console.log("frequency err", e);
+    res.send("FREQUENCY_ADD_FAIL");
+  }
+});
+
+app.post("/frequency/addArray", (req, res) => {
+  console.log("freq add array", req.body.array);
+  try {
+    let id = 0;
+    const array = req.body.array;
+    Frequent.remove({}, (err, suc) => {
+      if (err) {
+        console.log("error deleting", err);
+      } else {
+        console.log("suc", suc);
+
+        array.forEach(word => {
+          id++;
+          console.log("id", id, word);
+          Frequent.create({ id: id, word: word }, (err, res) => {
+            if (err) {
+              console.log("err", err);
+            } else {
+              console.log("res", res);
+            }
+          });
+        });
+      }
+    });
+    console.log(`frequencies ${id} added`);
+
+    res.send("FREQUENCY_ADD_SUCCESS");
+  } catch (e) {
+    console.log("frequency err", e);
+    res.send("FREQUENCY_ADD_FAIL");
+  }
 });
 
 app.listen(8000);
