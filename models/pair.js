@@ -11,6 +11,16 @@ let pairSchema = mongoose.Schema({
   translation: {
     type: String,
     required: false
+  },
+
+  fromLanguage: {
+    type: String,
+    required: true
+  },
+
+  toLanguage: {
+    type: String,
+    required: true
   }
 });
 

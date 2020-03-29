@@ -13,7 +13,11 @@ let userSchema = mongoose.Schema({
     type: String,
     required: true
   },
-  languageTo: {
+  toLanguage: {
+    type: String,
+    require: false
+  },
+  fromLanguage: {
     type: String,
     require: false
   }
