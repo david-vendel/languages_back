@@ -3,6 +3,9 @@ const path = require("path");
 const fs = require("fs");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
+const fetch = require("node-fetch");
+require("dotenv").config();
+const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
 mongoose.connect("mongodb://localhost/nodekb");
 let db = mongoose.connection;
@@ -32,6 +35,7 @@ const app = express();
 let Language = require("./models/language.js");
 let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
+let Pair = require("./models/pair.js");
 
 let current = "";
 
@@ -186,24 +190,41 @@ readFile = (name, code) => {
 app.get("/get/:id", (req, res) => {
   console.log("app get", req.params);
 
-  fs.readFile("./translator/100t.txt", "utf8", (err, file) => {
-    if (err) {
-      console.log(err);
-    } else {
-      console.log("get id > I got file");
-      const filearr = file.split("\n");
-      const ids = req.params.id.split(",");
-      console.log("ids", ids);
-      let response = [];
-      ids.forEach(id => {
-        console.log("id", id);
-        console.log("filearr", filearr[id]);
-        response.push(filearr[id].replace("\r", ""));
-        console.log("id,", id, "response", response);
-      });
-      res.send(JSON.stringify(response));
-    }
+  //   fs.readFile("./translator/100t.txt", "utf8", (err, file) => {
+  console.log("get id > I got file");
+  //   const filearr = file.split("\n");
+  const ids = req.params.id.split(",");
+  console.log("ids", ids);
+  let response = [];
+
+  let localRes = null;
+  const promise = new Promise(resolve => {
+    localRes = resolve;
   });
+
+  ids.forEach(id => {
+    console.log("id", id);
+    Pair.findOne({ id: id }, (err, found) => {
+      if (err) {
+        console.log("foundOne err");
+      } else {
+        console.log("found", id, found);
+        response.push(found);
+      }
+      if (response.length === 4) {
+        localRes();
+      }
+    });
+    // console.log("filearr", filearr[id]);
+    // response.push(filearr[id].replace("\r", ""));
+    // console.log("id,", id, "response", response);
+  });
+
+  promise.then(() => {
+    console.log("sendd response", response);
+    res.send(JSON.stringify(response));
+  });
+  //   });
 });
 
 //ass submit POST route
@@ -266,6 +287,73 @@ app.post("/languages/get-all", (req, res) => {
     } else {
       console.log("languages", languages);
       res.send(languages);
+    }
+  });
+});
+
+app.post("/frequencies/get-all", (req, res) => {
+  Frequent.find({}, (err, frequencies) => {
+    if (err) {
+      console.log("err", err);
+    } else {
+      console.log("frequencies", frequencies);
+      res.send(frequencies);
+    }
+  });
+});
+
+const translateThisWord = async (id, word) => {
+  let fromLang = "en";
+  let toLang = "fr";
+
+  let url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
+  url += "&q=" + encodeURI(word);
+  url += `&source=${fromLang}`;
+  url += `&target=${toLang}`;
+
+  console.log("translate", word);
+
+  try {
+    fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      }
+    })
+      .then(res => res.json())
+      .then(response => {
+        console.log("response from google: ", response);
+        console.log("return", response.data.translations[0].translatedText);
+
+        const translation = response.data.translations[0].translatedText;
+        try {
+          Pair.create({ id: id, word: word, translation: translation });
+        } catch (e) {
+          console.log("error", e);
+        }
+      })
+      .catch(error => {
+        console.log("There was an error with the translation request: ", error);
+      });
+  } catch (e) {
+    console.log("translateion e", e);
+  }
+};
+
+app.post("/frequencies/translate", (req, res) => {
+  console.log("freq trans");
+  Frequent.find({}, (err, frequencies) => {
+    if (err) {
+      console.log("err", err);
+    } else {
+      console.log("frequencies", frequencies);
+      frequencies.forEach(f => {
+        console.log("I have f:", f.id, f.word);
+        //only translate if translation is not yet done
+        const translation = translateThisWord(f.id, f.word);
+      });
+      res.send("TRANSLATED");
     }
   });
 });
