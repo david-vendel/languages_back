@@ -128,6 +128,60 @@ app.post("/login", (req, res) => {
   );
 });
 
+app.post("/signup", (req, res) => {
+  // console.log("login req", req);
+  const signup = req.body;
+  console.log("signup", signup, typeof signup);
+  User.find({ username: signup.username }, (err, answer) => {
+    if (err) {
+      console.log("signup > username find > database lookup error");
+    } else {
+      console.log("answer:", answer, answer[0], typeof answer);
+      if (!Array.isArray(answer)) {
+        console.log("signup failed");
+        //unauthorized
+        res
+          .status(401) // HTTP status 404: NotFound
+          .send("Signup Failed (users DB corrupted)");
+      } else if (answer[0]) {
+        // already exists
+        console.log("user", signup.username, "already exists");
+        res.status(303).send("USERNAME_ALREADY_EXISTS");
+      } else {
+        //can create
+        current = signup.username;
+        console.log("current user:", current);
+        const millis = Date.now();
+        const seconds = Math.floor(millis / 1000);
+        const random = Math.random();
+        const userToken = Math.floor(seconds * random);
+        User.create(
+          {
+            username: signup.username,
+            email: signup.email,
+            password: signup.password,
+            fromLanguage: "en",
+            toLanguage: "fr",
+            auth: userToken
+          },
+          (err, resp) => {
+            if (err) {
+              console.log("err", err);
+              res
+                .status(401) // HTTP status 404: NotFound
+                .send("Signup Failed");
+            } else {
+              console.log("res", res);
+              //res.json({ success: true, userToken });
+              res.status(200).send({ success: true, userToken: userToken });
+            }
+          }
+        );
+      }
+    }
+  });
+});
+
 // app.get("/logout", (req, res) => {
 //   current = "";
 //   console.log("logout");
@@ -457,7 +511,11 @@ app.post("/getLanguageTo", (req, res) => {
       res.send("LANGUAGE_TO_FAIL_AUTH_FIND");
     } else {
       console.log("LANGUAGE_TO_SUCCESS", suc);
-      res.send({ message: "LANGUAGE_TO_SUCCESS", toLanguage: suc.toLanguage });
+      res.send({
+        message: "LANGUAGE_TO_SUCCESS",
+        toLanguage: suc.toLanguage,
+        username: suc.username
+      });
     }
   });
 });

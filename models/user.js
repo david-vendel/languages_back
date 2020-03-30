@@ -13,6 +13,10 @@ let userSchema = mongoose.Schema({
     type: String,
     required: true
   },
+  email: {
+    type: String,
+    required: true
+  },
   toLanguage: {
     type: String,
     require: false
