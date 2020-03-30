@@ -253,13 +253,47 @@ const getToFrom = async username => {
   });
 };
 
-app.get("/get/:username/:id", async (req, res) => {
+app.get("/get/:username/:count", async (req, res) => {
   console.log("app get", req.params);
 
   //   fs.readFile("./translator/100t.txt", "utf8", (err, file) => {
   console.log("get id > I got file");
   //   const filearr = file.split("\n");
-  const ids = req.params.id.split(",");
+
+  let randomsArr = [];
+  let randomCandidate = 0;
+  let buglimiter = 0;
+  var countArr = [];
+
+  console.log("req.params.count", req.params.count);
+  const count =
+    req.params.count === "undefined"
+      ? 4
+      : req.params.count
+      ? parseInt(req.params.count)
+      : 4;
+
+  console.log("req.params.count", count);
+  for (var i = 0; i < count; i++) {
+    countArr.push(i);
+  }
+  countArr.forEach(a => {
+    buglimiter = 0;
+    randomCandidate = Math.ceil(Math.random() * 50);
+    while (buglimiter < 100 && randomsArr.includes(randomCandidate)) {
+      buglimiter += 1;
+      if (buglimiter > 99) {
+        console.warn("buglimiter 100");
+      }
+      console.log("randomsArr", randomsArr);
+      console.log("randomCandidate", randomCandidate);
+      randomCandidate = Math.ceil(Math.random() * 50);
+    }
+    randomsArr.push(randomCandidate);
+    console.log("randomsArr", randomsArr);
+  });
+  const ids = randomsArr;
+
   console.log("ids", ids);
   let response = [];
 
@@ -272,9 +306,14 @@ app.get("/get/:username/:id", async (req, res) => {
 
   const toFrom = await getToFrom(username);
   console.log("toFrom", toFrom);
-  const toLanguage = toFrom.toLanguage ? toFrom.toLanguage : "fr";
-  const fromLanguage = toFrom.fromLanguage ? toFrom.fromLanguage : "en";
 
+  let toLanguage = "fr";
+  let fromLanguage = "en";
+
+  if (toFrom) {
+    toLanguage = toFrom.toLanguage ? toFrom.toLanguage : "fr";
+    fromLanguage = toFrom.fromLanguage ? toFrom.fromLanguage : "en";
+  }
   console.log("toLanguage", toLanguage);
 
   ids.forEach(id => {
@@ -288,7 +327,7 @@ app.get("/get/:username/:id", async (req, res) => {
           console.log("found", id, found);
           response.push(found);
         }
-        if (response.length === 4) {
+        if (response.length === parseInt(count)) {
           localRes();
         }
       }
@@ -486,36 +525,77 @@ app.post("/frequencies/translate", (req, res) => {
   });
 });
 
-app.post("/setLanguageTo", (req, res) => {
-  console.log("setLanguageTo", req.body.toLanguage, req.body.auth);
-  User.updateOne(
-    { auth: req.body.auth },
-    { toLanguage: req.body.toLanguage },
-    (err, suc) => {
-      if (err) {
-        console.log("err", err);
-        res.send("LANGUAGE_TO_FAIL_AUTH_FIND");
-      } else {
-        console.log("LANGUAGE_TO_SUCCESS");
-        res.send("LANGUAGE_TO_SUCCESS");
+app.post("/userSettings/set", (req, res) => {
+  console.log("userSettings", req.body.type, req.body.setting, req.body.auth);
+
+  if (req.body.type === "toLanguage") {
+    User.updateOne(
+      { auth: req.body.auth },
+      { toLanguage: req.body.setting },
+      (err, suc) => {
+        if (err) {
+          console.log("err", err);
+          res.send("userSettings_FAIL_AUTH_FIND");
+        } else {
+          console.log("userSettings_TO_SUCCESS");
+          //res.send("userSettings_TO_SUCCESS");
+        }
       }
-    }
-  );
+    );
+  }
+
+  if (req.body.type === "choicesCount") {
+    User.updateOne(
+      { auth: req.body.auth },
+      { choicesCount: req.body.setting },
+      (err, suc) => {
+        if (err) {
+          console.log("err", err);
+          res.send("LANGUAGE_TO_FAIL_AUTH_FIND");
+        } else {
+          console.log("LANGUAGE_TO_SUCCESS");
+          //res.send("LANGUAGE_TO_SUCCESS");
+        }
+      }
+    );
+  }
+
+  res.status(200).send("updated");
 });
 
-app.post("/getLanguageTo", (req, res) => {
-  console.log("getLanguageTo", req.body.auth);
+app.post("/userSettings/get", (req, res) => {
+  console.log("get userSettings", req.body.auth);
   User.findOne({ auth: req.body.auth }, (err, suc) => {
     if (err) {
       console.log("err", err);
       res.send("LANGUAGE_TO_FAIL_AUTH_FIND");
     } else {
       console.log("LANGUAGE_TO_SUCCESS", suc);
-      res.send({
-        message: "LANGUAGE_TO_SUCCESS",
-        toLanguage: suc.toLanguage,
-        username: suc.username
-      });
+
+      const typeArr = JSON.parse(req.body.type);
+
+      let response = {
+        message: "LANGUAGE_TO_SUCCESS"
+      };
+
+      if (typeArr.includes("username")) {
+        response.username = suc.username;
+      }
+
+      if (typeArr.includes("choicesCount")) {
+        response.choicesCount = suc.choicesCount;
+      }
+
+      if (typeArr.includes("toLanguage")) {
+        response.toLanguage = suc.toLanguage;
+      }
+
+      if (typeArr.includes("fromLanguage")) {
+        response.fromLanguage = suc.fromLanguage;
+      }
+
+      console.log("response", response);
+      res.status(200).send(response);
     }
   });
 });

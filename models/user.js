@@ -24,6 +24,10 @@ let userSchema = mongoose.Schema({
   fromLanguage: {
     type: String,
     require: false
+  },
+  choicesCount: {
+    type: String,
+    require: false
   }
 });
 
