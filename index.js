@@ -260,42 +260,13 @@ app.get("/get/:username/:count", async (req, res) => {
   console.log("get id > I got file");
   //   const filearr = file.split("\n");
 
-  let randomsArr = [];
-  let randomCandidate = 0;
-  let buglimiter = 0;
-  var countArr = [];
-
   console.log("req.params.count", req.params.count);
-  const count =
+  let count =
     req.params.count === "undefined"
       ? 4
       : req.params.count
       ? parseInt(req.params.count)
       : 4;
-
-  console.log("req.params.count", count);
-  for (var i = 0; i < count; i++) {
-    countArr.push(i);
-  }
-  countArr.forEach(a => {
-    buglimiter = 0;
-    randomCandidate = Math.ceil(Math.random() * 50);
-    while (buglimiter < 100 && randomsArr.includes(randomCandidate)) {
-      buglimiter += 1;
-      if (buglimiter > 99) {
-        console.warn("buglimiter 100");
-      }
-      console.log("randomsArr", randomsArr);
-      console.log("randomCandidate", randomCandidate);
-      randomCandidate = Math.ceil(Math.random() * 50);
-    }
-    randomsArr.push(randomCandidate);
-    console.log("randomsArr", randomsArr);
-  });
-  const ids = randomsArr;
-
-  console.log("ids", ids);
-  let response = [];
 
   let localRes = null;
   const promise = new Promise(resolve => {
@@ -303,44 +274,83 @@ app.get("/get/:username/:count", async (req, res) => {
   });
 
   const username = req.params.username;
-
   const toFrom = await getToFrom(username);
   console.log("toFrom", toFrom);
 
   let toLanguage = "fr";
   let fromLanguage = "en";
-
   if (toFrom) {
     toLanguage = toFrom.toLanguage ? toFrom.toLanguage : "fr";
     fromLanguage = toFrom.fromLanguage ? toFrom.fromLanguage : "en";
   }
   console.log("toLanguage", toLanguage);
 
-  ids.forEach(id => {
-    console.log("id", id);
-    Pair.findOne(
-      { id: id, toLanguage: toLanguage, fromLanguage: fromLanguage },
+  let response = [];
+
+  console.log("Start");
+  let randomsArr = [];
+  let index = 0;
+  while (index < count) {
+    index++;
+
+    console.log("index", index);
+    buglimiter = 0;
+    let randomCandidate = Math.ceil(Math.random() * 10);
+    while (buglimiter < 100 && randomsArr.includes(randomCandidate)) {
+      buglimiter += 1;
+      if (buglimiter > 99) {
+        console.log("buglimiter 100");
+      }
+      console.log("randomsArr", randomsArr);
+      console.log("randomCandidate", randomCandidate);
+      randomCandidate = Math.ceil(Math.random() * 10);
+    }
+    randomsArr.push(randomCandidate);
+    console.log("randomsArr", randomsArr);
+
+    const rx = await Pair.findOne(
+      {
+        id: randomCandidate,
+        toLanguage: toLanguage,
+        fromLanguage: fromLanguage
+      },
       (err, found) => {
         if (err) {
           console.log("foundOne err");
         } else {
-          console.log("found", id, found);
-          response.push(found);
-        }
-        if (response.length === parseInt(count)) {
-          localRes();
+          console.log("found", randomCandidate, found);
+          if (found.word !== "" && found.translation !== "") {
+            response.push(found);
+          } else {
+            index--;
+          }
         }
       }
     );
-    // console.log("filearr", filearr[id]);
-    // response.push(filearr[id].replace("\r", ""));
-    // console.log("id,", id, "response", response);
-  });
+    console.log(response);
+  }
 
-  promise.then(() => {
-    console.log("sendd response", response);
-    res.send(JSON.stringify(response));
-  });
+  console.log("End");
+
+  //   while (response.length < parseInt(count)) {
+  //     randomCandidate = Math.ceil(Math.random() * 50);
+  //     const id = randomCandidate;
+
+  //     console.log("id", id);
+  //   }
+  //   if (response.length === parseInt(count)) {
+  //   localRes();
+  //   }
+
+  // console.log("filearr", filearr[id]);
+  // response.push(filearr[id].replace("\r", ""));
+  // console.log("id,", id, "response", response);
+  console.log("sendd response", response);
+
+  res.send(JSON.stringify(response));
+
+  //   promise.then(() => {
+  //   });
   //   });
 });
 
