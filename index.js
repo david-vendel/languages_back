@@ -37,6 +37,11 @@ let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
 let Pair = require("./models/pair.js");
 
+function parseHrtimeToSeconds(hrtime) {
+  var seconds = (hrtime[0] + hrtime[1] / 1e9).toFixed(3);
+  return seconds;
+}
+
 let current = "";
 
 app.use("/public", express.static(path.join(__dirname, "static")));
@@ -254,11 +259,13 @@ const getToFrom = async username => {
 };
 
 app.get("/get/:username/:count", async (req, res) => {
+  const COUNT = 50;
+  console.time("get");
+  var startTime = process.hrtime();
+
   console.log("app get", req.params);
 
-  //   fs.readFile("./translator/100t.txt", "utf8", (err, file) => {
   console.log("get id > I got file");
-  //   const filearr = file.split("\n");
 
   console.log("req.params.count", req.params.count);
   let count =
@@ -293,22 +300,17 @@ app.get("/get/:username/:count", async (req, res) => {
   while (index < count) {
     index++;
 
-    console.log("index", index);
-    buglimiter = 0;
-    let randomCandidate = Math.ceil(Math.random() * 10);
-    while (buglimiter < 100 && randomsArr.includes(randomCandidate)) {
-      buglimiter += 1;
-      if (buglimiter > 99) {
-        console.log("buglimiter 100");
+    cycleLimiter = 0;
+    let randomCandidate = Math.ceil(Math.random() * COUNT);
+    while (cycleLimiter < 100 && randomsArr.includes(randomCandidate)) {
+      cycleLimiter += 1;
+      if (cycleLimiter >= 99) {
       }
-      console.log("randomsArr", randomsArr);
-      console.log("randomCandidate", randomCandidate);
-      randomCandidate = Math.ceil(Math.random() * 10);
+      randomCandidate = Math.ceil(Math.random() * COUNT);
     }
     randomsArr.push(randomCandidate);
-    console.log("randomsArr", randomsArr);
 
-    const rx = await Pair.findOne(
+    await Pair.findOne(
       {
         id: randomCandidate,
         toLanguage: toLanguage,
@@ -318,9 +320,12 @@ app.get("/get/:username/:count", async (req, res) => {
         if (err) {
           console.log("foundOne err");
         } else {
-          console.log("found", randomCandidate, found);
           if (found.word !== "" && found.translation !== "") {
-            response.push(found);
+            response.push({
+              id: found.id,
+              word: found.word,
+              translation: found.translation
+            });
           } else {
             index--;
           }
@@ -332,26 +337,13 @@ app.get("/get/:username/:count", async (req, res) => {
 
   console.log("End");
 
-  //   while (response.length < parseInt(count)) {
-  //     randomCandidate = Math.ceil(Math.random() * 50);
-  //     const id = randomCandidate;
-
-  //     console.log("id", id);
-  //   }
-  //   if (response.length === parseInt(count)) {
-  //   localRes();
-  //   }
-
-  // console.log("filearr", filearr[id]);
-  // response.push(filearr[id].replace("\r", ""));
-  // console.log("id,", id, "response", response);
   console.log("sendd response", response);
+  console.timeEnd("get");
 
-  res.send(JSON.stringify(response));
+  var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
+  console.log("It takes " + elapsedSeconds + "seconds");
 
-  //   promise.then(() => {
-  //   });
-  //   });
+  res.send({ pairs: response, lookupTime: elapsedSeconds });
 });
 
 //ass submit POST route
