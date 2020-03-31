@@ -247,12 +247,16 @@ readFile = (name, code) => {
 };
 
 const getToFrom = async username => {
+  console.time("getToFrom");
+
   return User.findOne({ username: username }, (err, suc) => {
     if (err) {
       console.log("err", err);
       res.send("LANGUAGE_getToFrom_FAIL");
     } else {
       console.log("LANGUAGE_getToFrom_SUCCESS", suc);
+      console.timeEnd("getToFrom");
+
       return suc;
     }
   });
@@ -281,7 +285,7 @@ app.get("/get/:username/:count", async (req, res) => {
   });
 
   const username = req.params.username;
-  const toFrom = await getToFrom(username);
+  const toFrom = await getToFrom(username); //here could be some optimalization, to receive toFrom from React if it has it
   console.log("toFrom", toFrom);
 
   let toLanguage = "fr";
@@ -292,58 +296,55 @@ app.get("/get/:username/:count", async (req, res) => {
   }
   console.log("toLanguage", toLanguage);
 
-  let response = [];
-
   console.log("Start");
   let randomsArr = [];
   let index = 0;
-  while (index < count) {
-    index++;
 
+  while (randomsArr.length < count) {
     cycleLimiter = 0;
     let randomCandidate = Math.ceil(Math.random() * COUNT);
     while (cycleLimiter < 100 && randomsArr.includes(randomCandidate)) {
       cycleLimiter += 1;
-      if (cycleLimiter >= 99) {
-      }
       randomCandidate = Math.ceil(Math.random() * COUNT);
     }
-    randomsArr.push(randomCandidate);
-
-    await Pair.findOne(
-      {
-        id: randomCandidate,
-        toLanguage: toLanguage,
-        fromLanguage: fromLanguage
-      },
-      (err, found) => {
-        if (err) {
-          console.log("foundOne err");
-        } else {
-          if (found.word !== "" && found.translation !== "") {
-            response.push({
-              id: found.id,
-              word: found.word,
-              translation: found.translation
-            });
-          } else {
-            index--;
-          }
-        }
-      }
-    );
-    console.log(response);
+    randomsArr.push(randomCandidate.toString(10));
   }
 
-  console.log("End");
+  console.log("randomsArr", randomsArr);
 
-  console.log("sendd response", response);
-  console.timeEnd("get");
+  await Pair.find({
+    toLanguage: toLanguage,
+    fromLanguage: fromLanguage,
+    translation: { $ne: "" },
+    word: { $ne: "" }
+  })
+    .where("id")
+    .in(randomsArr)
+    .exec((err, found) => {
+      if (err) {
+        console.log("foundMore err");
+        res.status(500).send("PAIR_FIND_ERR");
+      } else {
+        console.log("found", found);
+        // response.push({
+        //   id: found.id,
+        //   word: found.word,
+        //   translation: found.translation
+        // });
+        localRes();
+        const response = found;
 
-  var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
-  console.log("It takes " + elapsedSeconds + "seconds");
+        console.log("End");
 
-  res.send({ pairs: response, lookupTime: elapsedSeconds });
+        console.log("sendd response", response);
+        console.timeEnd("get");
+
+        var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
+        console.log("It takes " + elapsedSeconds + "seconds");
+
+        res.status(200).send({ pairs: response, lookupTime: elapsedSeconds });
+      }
+    });
 });
 
 //ass submit POST route
