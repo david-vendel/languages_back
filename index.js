@@ -4,6 +4,7 @@ const fs = require("fs");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
+const { PAIR_EDIT, TRANSLATE_ONE } = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
@@ -247,17 +248,18 @@ readFile = (name, code) => {
 };
 
 const getToFrom = async username => {
-  console.time("getToFrom");
+  console.time("getToFrom", username);
 
   return User.findOne({ username: username }, (err, suc) => {
     if (err) {
       console.log("err", err);
       res.send("LANGUAGE_getToFrom_FAIL");
+      return { toLanguage: toLanguage, fromLanguage: fromLanguage };
     } else {
       console.log("LANGUAGE_getToFrom_SUCCESS", suc);
       console.timeEnd("getToFrom");
 
-      return suc;
+      return { toLanguage: suc.toLanguage, fromLanguage: suc.fromLanguage };
     }
   });
 };
@@ -302,10 +304,13 @@ app.get("/get/:username/:count", async (req, res) => {
 
   while (randomsArr.length < count) {
     cycleLimiter = 0;
-    let randomCandidate = Math.ceil(Math.random() * COUNT);
-    while (cycleLimiter < 100 && randomsArr.includes(randomCandidate)) {
+    let randomCandidate = Math.floor(Math.random() * COUNT);
+    while (
+      cycleLimiter < 100 &&
+      randomsArr.includes(randomCandidate.toString(10))
+    ) {
       cycleLimiter += 1;
-      randomCandidate = Math.ceil(Math.random() * COUNT);
+      randomCandidate = Math.floor(Math.random() * COUNT);
     }
     randomsArr.push(randomCandidate.toString(10));
   }
@@ -314,9 +319,9 @@ app.get("/get/:username/:count", async (req, res) => {
 
   await Pair.find({
     toLanguage: toLanguage,
-    fromLanguage: fromLanguage,
-    translation: { $ne: "" },
-    word: { $ne: "" }
+    fromLanguage: fromLanguage
+    //translation: { $ne: "" },
+    //word: { $ne: "" }
   })
     .where("id")
     .in(randomsArr)
@@ -422,6 +427,26 @@ app.post("/frequencies/get-all", (req, res) => {
   });
 });
 
+app.post("/pairs/get-all", async (req, res) => {
+  const username = req.body.username;
+  const { toLanguage, fromLanguage } = await getToFrom(username); //here could be some optimalization, to receive toFrom from React if it has it
+  console.log("toLanguage", toLanguage);
+
+  Pair.find(
+    { toLanguage: toLanguage, fromLanguage: fromLanguage },
+    null,
+    { sort: { id: 1 } },
+    (err, pairs) => {
+      if (err) {
+        console.log("err", err);
+      } else {
+        console.log("pairs", pairs);
+        res.send(pairs);
+      }
+    }
+  );
+});
+
 const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
   let url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
   url += "&q=" + encodeURI(word);
@@ -504,6 +529,53 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
   );
 };
 
+app.post(TRANSLATE_ONE, (req, res) => {
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const word = req.body.word;
+
+  let url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
+  url += "&q=" + encodeURI(word);
+  url += `&source=${fromLanguage}`;
+  url += `&target=${toLanguage}`;
+
+  console.log("translate", word);
+  console.log("url", url);
+  try {
+    fetch(url, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      }
+    })
+      .then(res => res.json())
+      .then(response => {
+        console.log("response from google: ", response);
+        console.log("return", response.data.translations[0].translatedText);
+        res.send(response);
+        // const translation = response.data.translations[0].translatedText;
+        // try {
+        //   Pair.create({
+        //     id: id,
+        //     word: word,
+        //     toLanguage: toLanguage,
+        //     fromLanguage: fromLanguage,
+        //     translation: translation
+        //   });
+        // } catch (e) {
+        //   console.log("error", e);
+        // }
+      })
+      .catch(error => {
+        console.log("There was an error with the translation request: ", error);
+        res.status(500).send("TRANSLATE ONE FAIL");
+      });
+  } catch (e) {
+    console.log("translateion e", e);
+  }
+});
+
 app.post("/frequencies/translate", (req, res) => {
   const fromLanguage = req.body.fromLanguage;
   const toLanguage = req.body.toLanguage;
@@ -526,6 +598,28 @@ app.post("/frequencies/translate", (req, res) => {
       res.send("TRANSLATED");
     }
   });
+});
+
+app.post(PAIR_EDIT, (req, res) => {
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const id = req.body.id;
+  const translation = req.body.translation;
+
+  console.log("pair edit", id, fromLanguage, toLanguage, translation);
+  Pair.updateOne(
+    { id: id, fromLanguage: fromLanguage, toLanguage: toLanguage },
+    { translation: translation },
+    (err, result) => {
+      if (err) {
+        console.log("err", err);
+        res.status(500).send("PAIR_EDIT FAILED");
+      } else {
+        console.log("result", result);
+        res.send("PAIR_EDIT SUCCESS");
+      }
+    }
+  );
 });
 
 app.post("/userSettings/set", (req, res) => {
@@ -616,20 +710,20 @@ app.post("/languages/delete/:word", (req, res) => {
   });
 });
 
-app.post("/frequency/add", (req, res) => {
-  console.log("freq add", req.body.id, req.body.word);
-  try {
-    Frequent.create({
-      id: req.body.id,
-      word: req.body.word
-    });
-    console.log("frequency added");
-    res.send("FREQUENCY_ADD_SUCCESS");
-  } catch (e) {
-    console.log("frequency err", e);
-    res.send("FREQUENCY_ADD_FAIL");
-  }
-});
+// app.post("/frequency/add", (req, res) => {
+//   console.log("freq add", req.body.id, req.body.word);
+//   try {
+//     Frequent.create({
+//       id: req.body.id,
+//       word: req.body.word
+//     });
+//     console.log("frequency added");
+//     res.send("FREQUENCY_ADD_SUCCESS");
+//   } catch (e) {
+//     console.log("frequency err", e);
+//     res.send("FREQUENCY_ADD_FAIL");
+//   }
+// });
 
 app.post("/frequency/addArray", (req, res) => {
   console.log("freq add array", req.body.array);
@@ -643,7 +737,6 @@ app.post("/frequency/addArray", (req, res) => {
         console.log("suc", suc);
 
         array.forEach(word => {
-          id++;
           console.log("id", id, word);
           Frequent.create({ id: id, word: word }, (err, res) => {
             if (err) {
@@ -652,6 +745,7 @@ app.post("/frequency/addArray", (req, res) => {
               console.log("res", res);
             }
           });
+          id++;
         });
       }
     });
