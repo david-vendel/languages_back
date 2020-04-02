@@ -743,6 +743,8 @@ app.post(LOG_USER_ACTION, (req, res) => {
 });
 
 app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
+  var startTime = process.hrtime();
+
   const fromLanguage = req.body.fromLanguage;
   const toLanguage = req.body.toLanguage;
   const username = req.body.username;
@@ -774,11 +776,13 @@ app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
         });
 
         console.log("good / bad", good, bad);
+        var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
 
         res.send({
           last24hours: {
             good: good,
-            bad: bad
+            bad: bad,
+            lookupTime: elapsedSeconds
           }
         });
       }
