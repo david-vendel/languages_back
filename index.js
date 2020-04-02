@@ -4,7 +4,12 @@ const fs = require("fs");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
-const { PAIR_EDIT, TRANSLATE_ONE } = require("./endpoints");
+const {
+  PAIR_EDIT,
+  TRANSLATE_ONE,
+  LOG_USER_ACTION,
+  USER_PROGRESS_GET_TWENTY_FOUR
+} = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
@@ -37,6 +42,7 @@ let Language = require("./models/language.js");
 let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
 let Pair = require("./models/pair.js");
+let Log = require("./models/log.js");
 
 function parseHrtimeToSeconds(hrtime) {
   var seconds = (hrtime[0] + hrtime[1] / 1e9).toFixed(3);
@@ -697,17 +703,92 @@ app.post("/userSettings/get", (req, res) => {
   });
 });
 
-app.post("/languages/delete/:word", (req, res) => {
-  console.log("removing", req.params.word);
-  Language.deleteOne({ word: req.params.word }, err => {
-    if (err) {
-      console.log("err", err);
-      res.send("NOT_DELETED");
-    } else {
-      console.log("deleted");
-      res.send("DELETED_SUCCESSFULLY");
-    }
-  });
+// app.post("/languages/delete/:word", (req, res) => {
+//   console.log("removing", req.params.word);
+//   Language.deleteOne({ word: req.params.word }, err => {
+//     if (err) {
+//       console.log("err", err);
+//       res.send("NOT_DELETED");
+//     } else {
+//       console.log("deleted");
+//       res.send("DELETED_SUCCESSFULLY");
+//     }
+//   });
+// });
+
+app.post(LOG_USER_ACTION, (req, res) => {
+  const word = req.body.word;
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const username = req.body.username;
+  const success = req.body.success;
+  const action = req.body.action;
+
+  try {
+    Log.create({
+      word: word,
+      toLanguage: toLanguage,
+      fromLanguage: fromLanguage,
+      username: username,
+      success: success,
+      action: action
+    });
+
+    console.log("LOG_SUCCESS");
+    res.send("LOG_SUCCESS");
+  } catch (e) {
+    console.log("error", e);
+    res.status(500).send("LOG_FAIL");
+  }
+});
+
+app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const username = req.body.username;
+  console.log("USER_PROGRESS_GET");
+  try {
+    // optimalization needed if I knew how to use aggregate better
+    Log.aggregate([
+      {
+        $match: {
+          createdAt: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          toLanguage: toLanguage,
+          fromLanguage: fromLanguage,
+          username: username
+        }
+      }
+    ]).exec((err, result) => {
+      if (err) {
+        console.log("err", err);
+      } else {
+        console.log("result", result);
+        let good = 0;
+        let bad = 0;
+        result.forEach(r => {
+          if (r.success) {
+            good++;
+          } else {
+            bad++;
+          }
+        });
+
+        console.log("good / bad", good, bad);
+
+        res.send({
+          last24hours: {
+            good: good,
+            bad: bad
+          }
+        });
+      }
+    });
+
+    console.log("USER_PROGRESS_GET SUCCCESS");
+  } catch (e) {
+    console.log("error", e);
+    res.status(500).send("USER_PROGRESS_GET FAIL");
+  }
 });
 
 // app.post("/frequency/add", (req, res) => {
