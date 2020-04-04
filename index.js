@@ -679,23 +679,61 @@ app.post(USER_WORD_FLAG, (req, res) => {
   const fromLanguage = req.body.fromLanguage;
   const id = req.body.id;
   const word = req.body.word;
+  const positive = req.body.positive;
 
   console.log("USER_WORD_FLAG", username, id);
 
-  User.updateOne(
-    { username: username },
-    { $push: { flaggedWords: { language: fromLanguage, id: id, word: word } } },
-    function(error, success) {
-      if (error) {
-        console.log(error);
-        res.status(500).send("updated fail");
-      } else {
-        console.log(success);
-        res.status(200).send("updated");
+  if (positive) {
+    User.updateOne(
+      { username: username },
+      {
+        $push: { flaggedWords: { language: fromLanguage, id: id, word: word } }
+      },
+      function(error, success) {
+        if (error) {
+          console.log(error);
+          res.status(500).send("updated fail");
+        } else {
+          console.log(success);
+          res.status(200).send("updated");
+        }
       }
-    }
-  );
+    );
+  } else {
+    User.updateOne(
+      { username: username },
+      {
+        $pull: { flaggedWords: { language: fromLanguage, word: word } }
+      },
+      function(error, success) {
+        if (error) {
+          console.log(error);
+          res.status(500).send("removed flagged fail");
+        } else {
+          console.log(success);
+          res.status(200).send("removed flagged success");
+        }
+      }
+    );
+  }
 });
+
+// app.post(USER_GET_ALL_FLAGGED, (req, res) => {
+//   const username = req.body.username;
+//   const fromLanguage = req.body.fromLanguage;
+
+//   console.log("USER_GET_ALL_FLAGGED", username, fromLanguage);
+
+//   User.find({ username: username }, { flaggedWords }, function(error, success) {
+//     if (error) {
+//       console.log(error);
+//       res.status(500).send("updated fail");
+//     } else {
+//       console.log(success);
+//       res.status(200).send(success);
+//     }
+//   });
+// });
 
 app.post("/userSettings/set", (req, res) => {
   console.log("userSettings", req.body.type, req.body.setting, req.body.auth);
@@ -764,6 +802,10 @@ app.post("/userSettings/get", (req, res) => {
 
       if (typeArr.includes("fromLanguage")) {
         response.fromLanguage = suc.fromLanguage;
+      }
+
+      if (typeArr.includes("flaggedWords")) {
+        response.flaggedWords = suc.flaggedWords;
       }
 
       console.log("response", response);
