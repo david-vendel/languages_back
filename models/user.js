@@ -28,6 +28,10 @@ let userSchema = mongoose.Schema({
   choicesCount: {
     type: String,
     require: false
+  },
+  flaggedWords: {
+    type: Object,
+    required: false
   }
 });
 

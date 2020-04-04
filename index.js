@@ -4,7 +4,13 @@ const fs = require("fs");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
-const { PAIR_EDIT, TRANSLATE_ONE } = require("./endpoints");
+const {
+  PAIR_EDIT,
+  TRANSLATE_ONE,
+  LOG_USER_ACTION,
+  USER_PROGRESS_GET_TWENTY_FOUR,
+  USER_WORD_FLAG
+} = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
@@ -37,6 +43,7 @@ let Language = require("./models/language.js");
 let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
 let Pair = require("./models/pair.js");
+let Log = require("./models/log.js");
 
 function parseHrtimeToSeconds(hrtime) {
   var seconds = (hrtime[0] + hrtime[1] / 1e9).toFixed(3);
@@ -302,24 +309,61 @@ app.get("/get/:username/:count", async (req, res) => {
   let randomsArr = [];
   let index = 0;
 
+  const userFound = await User.findOne(
+    { username: username },
+    (userErr, userFound) => {
+      if (userErr) {
+        console.log("user find err", userErr);
+        res.status(500).send("USER FIND FAIL");
+      } else {
+        return userFound;
+      }
+    }
+  );
+
+  const flaggedIds = [];
+  if (userFound.flaggedWords && userFound.flaggedWords.length > 0) {
+    userFound.flaggedWords.forEach(f => {
+      if (f.language === fromLanguage) {
+        flaggedIds.push(f.id);
+      }
+    });
+  }
+
+  console.log("flaggedIds", flaggedIds);
+
   while (randomsArr.length < count) {
     cycleLimiter = 0;
     let randomCandidate = Math.floor(Math.random() * COUNT);
     while (
       cycleLimiter < 100 &&
-      randomsArr.includes(randomCandidate.toString(10))
+      (randomsArr.includes(randomCandidate.toString(10)) ||
+        flaggedIds.includes(randomCandidate))
     ) {
+      if (cycleLimiter >= 98) {
+        console.log("CYCLE LIMITED", cycleLimiter);
+      }
       cycleLimiter += 1;
       randomCandidate = Math.floor(Math.random() * COUNT);
     }
-    randomsArr.push(randomCandidate.toString(10));
+    console.log("randomCandidate", randomCandidate);
+    if (!randomsArr.includes(randomCandidate.toString(10))) {
+      randomsArr.push(randomCandidate.toString(10));
+    }
+    console.log("logic", randomsArr.includes(randomCandidate.toString(10)));
+    console.log("randomsArr", randomsArr);
+    console.log("randomCandidate.toString(10)", randomCandidate.toString(10));
   }
 
   console.log("randomsArr", randomsArr);
 
+  //todo need to get more words
+
+  // getting count of word pairs for lesson request
   await Pair.find({
     toLanguage: toLanguage,
     fromLanguage: fromLanguage
+    // display: true
     //translation: { $ne: "" },
     //word: { $ne: "" }
   })
@@ -508,7 +552,8 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
                     word: word,
                     toLanguage: toLanguage,
                     fromLanguage: fromLanguage,
-                    translation: translation
+                    translation: translation,
+                    display: true
                   });
                 } catch (e) {
                   console.log("error", e);
@@ -528,6 +573,13 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
     }
   );
 };
+// //
+// app.post(PAIR_FLAG, (req, res) => {
+//   const fromLanguage = req.body.fromLanguage;
+//   const toLanguage = req.body.toLanguage;
+//   const word = req.body.word;
+//   const username = req.body.username;
+// });
 
 app.post(TRANSLATE_ONE, (req, res) => {
   const fromLanguage = req.body.fromLanguage;
@@ -622,6 +674,67 @@ app.post(PAIR_EDIT, (req, res) => {
   );
 });
 
+app.post(USER_WORD_FLAG, (req, res) => {
+  const username = req.body.username;
+  const fromLanguage = req.body.fromLanguage;
+  const id = req.body.id;
+  const word = req.body.word;
+  const positive = req.body.positive;
+
+  console.log("USER_WORD_FLAG", username, id);
+
+  if (positive) {
+    User.updateOne(
+      { username: username },
+      {
+        $push: { flaggedWords: { language: fromLanguage, id: id, word: word } }
+      },
+      function(error, success) {
+        if (error) {
+          console.log(error);
+          res.status(500).send("updated fail");
+        } else {
+          console.log(success);
+          res.status(200).send("updated");
+        }
+      }
+    );
+  } else {
+    User.updateOne(
+      { username: username },
+      {
+        $pull: { flaggedWords: { language: fromLanguage, word: word } }
+      },
+      function(error, success) {
+        if (error) {
+          console.log(error);
+          res.status(500).send("removed flagged fail");
+        } else {
+          console.log(success);
+          res.status(200).send("removed flagged success");
+        }
+      }
+    );
+  }
+});
+
+// app.post(USER_GET_ALL_FLAGGED, (req, res) => {
+//   const username = req.body.username;
+//   const fromLanguage = req.body.fromLanguage;
+
+//   console.log("USER_GET_ALL_FLAGGED", username, fromLanguage);
+
+//   User.find({ username: username }, { flaggedWords }, function(error, success) {
+//     if (error) {
+//       console.log(error);
+//       res.status(500).send("updated fail");
+//     } else {
+//       console.log(success);
+//       res.status(200).send(success);
+//     }
+//   });
+// });
+
 app.post("/userSettings/set", (req, res) => {
   console.log("userSettings", req.body.type, req.body.setting, req.body.auth);
 
@@ -691,23 +804,106 @@ app.post("/userSettings/get", (req, res) => {
         response.fromLanguage = suc.fromLanguage;
       }
 
+      if (typeArr.includes("flaggedWords")) {
+        response.flaggedWords = suc.flaggedWords;
+      }
+
       console.log("response", response);
       res.status(200).send(response);
     }
   });
 });
 
-app.post("/languages/delete/:word", (req, res) => {
-  console.log("removing", req.params.word);
-  Language.deleteOne({ word: req.params.word }, err => {
-    if (err) {
-      console.log("err", err);
-      res.send("NOT_DELETED");
-    } else {
-      console.log("deleted");
-      res.send("DELETED_SUCCESSFULLY");
-    }
-  });
+// app.post("/languages/delete/:word", (req, res) => {
+//   console.log("removing", req.params.word);
+//   Language.deleteOne({ word: req.params.word }, err => {
+//     if (err) {
+//       console.log("err", err);
+//       res.send("NOT_DELETED");
+//     } else {
+//       console.log("deleted");
+//       res.send("DELETED_SUCCESSFULLY");
+//     }
+//   });
+// });
+
+app.post(LOG_USER_ACTION, (req, res) => {
+  const word = req.body.word;
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const username = req.body.username;
+  const success = req.body.success;
+  const action = req.body.action;
+
+  try {
+    Log.create({
+      word: word,
+      toLanguage: toLanguage,
+      fromLanguage: fromLanguage,
+      username: username,
+      success: success,
+      action: action
+    });
+
+    console.log("LOG_SUCCESS");
+    res.send("LOG_SUCCESS");
+  } catch (e) {
+    console.log("error", e);
+    res.status(500).send("LOG_FAIL");
+  }
+});
+
+app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
+  var startTime = process.hrtime();
+
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const username = req.body.username;
+  console.log("USER_PROGRESS_GET");
+  try {
+    // optimalization needed if I knew how to use aggregate better
+    Log.aggregate([
+      {
+        $match: {
+          createdAt: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          toLanguage: toLanguage,
+          fromLanguage: fromLanguage,
+          username: username
+        }
+      }
+    ]).exec((err, result) => {
+      if (err) {
+        console.log("err", err);
+      } else {
+        console.log("result", result);
+        let good = 0;
+        let bad = 0;
+        result.forEach(r => {
+          if (r.success) {
+            good++;
+          } else {
+            bad++;
+          }
+        });
+
+        console.log("good / bad", good, bad);
+        var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
+
+        res.send({
+          last24hours: {
+            good: good,
+            bad: bad,
+            lookupTime: elapsedSeconds
+          }
+        });
+      }
+    });
+
+    console.log("USER_PROGRESS_GET SUCCCESS");
+  } catch (e) {
+    console.log("error", e);
+    res.status(500).send("USER_PROGRESS_GET FAIL");
+  }
 });
 
 // app.post("/frequency/add", (req, res) => {
