@@ -8,7 +8,8 @@ const {
   PAIR_EDIT,
   TRANSLATE_ONE,
   LOG_USER_ACTION,
-  USER_PROGRESS_GET_TWENTY_FOUR
+  USER_PROGRESS_GET_TWENTY_FOUR,
+  USER_WORD_FLAG
 } = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
@@ -308,24 +309,61 @@ app.get("/get/:username/:count", async (req, res) => {
   let randomsArr = [];
   let index = 0;
 
+  const userFound = await User.findOne(
+    { username: username },
+    (userErr, userFound) => {
+      if (userErr) {
+        console.log("user find err", userErr);
+        res.status(500).send("USER FIND FAIL");
+      } else {
+        return userFound;
+      }
+    }
+  );
+
+  const flaggedIds = [];
+  if (userFound.flaggedWords && userFound.flaggedWords.length > 0) {
+    userFound.flaggedWords.forEach(f => {
+      if (f.language === fromLanguage) {
+        flaggedIds.push(f.id);
+      }
+    });
+  }
+
+  console.log("flaggedIds", flaggedIds);
+
   while (randomsArr.length < count) {
     cycleLimiter = 0;
     let randomCandidate = Math.floor(Math.random() * COUNT);
     while (
       cycleLimiter < 100 &&
-      randomsArr.includes(randomCandidate.toString(10))
+      (randomsArr.includes(randomCandidate.toString(10)) ||
+        flaggedIds.includes(randomCandidate))
     ) {
+      if (cycleLimiter >= 98) {
+        console.log("CYCLE LIMITED", cycleLimiter);
+      }
       cycleLimiter += 1;
       randomCandidate = Math.floor(Math.random() * COUNT);
     }
-    randomsArr.push(randomCandidate.toString(10));
+    console.log("randomCandidate", randomCandidate);
+    if (!randomsArr.includes(randomCandidate.toString(10))) {
+      randomsArr.push(randomCandidate.toString(10));
+    }
+    console.log("logic", randomsArr.includes(randomCandidate.toString(10)));
+    console.log("randomsArr", randomsArr);
+    console.log("randomCandidate.toString(10)", randomCandidate.toString(10));
   }
 
   console.log("randomsArr", randomsArr);
 
+  //todo need to get more words
+
+  // getting count of word pairs for lesson request
   await Pair.find({
     toLanguage: toLanguage,
     fromLanguage: fromLanguage
+    // display: true
     //translation: { $ne: "" },
     //word: { $ne: "" }
   })
@@ -514,7 +552,8 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
                     word: word,
                     toLanguage: toLanguage,
                     fromLanguage: fromLanguage,
-                    translation: translation
+                    translation: translation,
+                    display: true
                   });
                 } catch (e) {
                   console.log("error", e);
@@ -534,6 +573,13 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
     }
   );
 };
+// //
+// app.post(PAIR_FLAG, (req, res) => {
+//   const fromLanguage = req.body.fromLanguage;
+//   const toLanguage = req.body.toLanguage;
+//   const word = req.body.word;
+//   const username = req.body.username;
+// });
 
 app.post(TRANSLATE_ONE, (req, res) => {
   const fromLanguage = req.body.fromLanguage;
@@ -623,6 +669,29 @@ app.post(PAIR_EDIT, (req, res) => {
       } else {
         console.log("result", result);
         res.send("PAIR_EDIT SUCCESS");
+      }
+    }
+  );
+});
+
+app.post(USER_WORD_FLAG, (req, res) => {
+  const username = req.body.username;
+  const fromLanguage = req.body.fromLanguage;
+  const id = req.body.id;
+  const word = req.body.word;
+
+  console.log("USER_WORD_FLAG", username, id);
+
+  User.updateOne(
+    { username: username },
+    { $push: { flaggedWords: { language: fromLanguage, id: id, word: word } } },
+    function(error, success) {
+      if (error) {
+        console.log(error);
+        res.status(500).send("updated fail");
+      } else {
+        console.log(success);
+        res.status(200).send("updated");
       }
     }
   );

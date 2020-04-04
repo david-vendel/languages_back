@@ -21,6 +21,11 @@ let pairSchema = mongoose.Schema({
   toLanguage: {
     type: String,
     required: true
+  },
+
+  display: {
+    type: Boolean,
+    required: true
   }
 });
 
