@@ -32,6 +32,10 @@ let userSchema = mongoose.Schema({
   flaggedWords: {
     type: Object,
     required: false
+  },
+  progress: {
+    type: Number,
+    required: false
   }
 });
 

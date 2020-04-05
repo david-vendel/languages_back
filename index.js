@@ -14,6 +14,8 @@ const {
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
+const DICT_SIZE = 4999;
+
 mongoose.connect("mongodb://localhost/nodekb");
 let db = mongoose.connection;
 
@@ -44,6 +46,7 @@ let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
 let Pair = require("./models/pair.js");
 let Log = require("./models/log.js");
+let Translation = require("./models/translation.js");
 
 function parseHrtimeToSeconds(hrtime) {
   var seconds = (hrtime[0] + hrtime[1] / 1e9).toFixed(3);
@@ -271,21 +274,20 @@ const getToFrom = async username => {
   });
 };
 
-app.get("/get/:username/:count", async (req, res) => {
-  const COUNT = 50;
+app.post("/get", async (req, res) => {
+  const COUNT = DICT_SIZE;
+  const SPREAD = 100;
   console.time("get");
   var startTime = process.hrtime();
 
-  console.log("app get", req.params);
-
   console.log("get id > I got file");
 
-  console.log("req.params.count", req.params.count);
+  console.log("req.params.count", req.body.count);
   let count =
-    req.params.count === "undefined"
+    req.body.count === "undefined"
       ? 4
-      : req.params.count
-      ? parseInt(req.params.count)
+      : req.body.count
+      ? parseInt(req.body.count)
       : 4;
 
   let localRes = null;
@@ -293,22 +295,8 @@ app.get("/get/:username/:count", async (req, res) => {
     localRes = resolve;
   });
 
-  const username = req.params.username;
-  const toFrom = await getToFrom(username); //here could be some optimalization, to receive toFrom from React if it has it
-  console.log("toFrom", toFrom);
-
-  let toLanguage = "fr";
-  let fromLanguage = "en";
-  if (toFrom) {
-    toLanguage = toFrom.toLanguage ? toFrom.toLanguage : "fr";
-    fromLanguage = toFrom.fromLanguage ? toFrom.fromLanguage : "en";
-  }
-  console.log("toLanguage", toLanguage);
-
-  console.log("Start");
-  let randomsArr = [];
-  let index = 0;
-
+  const username = req.body.username;
+  //const toFrom = await getToFrom(username); //here could be some optimalization, to receive toFrom from React if it has it
   const userFound = await User.findOne(
     { username: username },
     (userErr, userFound) => {
@@ -320,6 +308,18 @@ app.get("/get/:username/:count", async (req, res) => {
       }
     }
   );
+  let toLanguage = "fr";
+  let fromLanguage = "en";
+  let position = req.body.position;
+  if (userFound) {
+    toLanguage = userFound.toLanguage ? userFound.toLanguage : "fr";
+    fromLanguage = userFound.fromLanguage ? userFound.fromLanguage : "en";
+  }
+  console.log("toLanguage", toLanguage);
+
+  console.log("Start");
+  let randomsArr = [];
+  let index = 0;
 
   const flaggedIds = [];
   if (userFound.flaggedWords && userFound.flaggedWords.length > 0) {
@@ -334,17 +334,21 @@ app.get("/get/:username/:count", async (req, res) => {
 
   while (randomsArr.length < count) {
     cycleLimiter = 0;
-    let randomCandidate = Math.floor(Math.random() * COUNT);
+    let randomCandidate = -1;
     while (
-      cycleLimiter < 100 &&
-      (randomsArr.includes(randomCandidate.toString(10)) ||
-        flaggedIds.includes(randomCandidate))
+      randomCandidate === -1 ||
+      (cycleLimiter < 100 &&
+        (randomsArr.includes(randomCandidate.toString(10)) ||
+          flaggedIds.includes(randomCandidate)))
     ) {
       if (cycleLimiter >= 98) {
         console.log("CYCLE LIMITED", cycleLimiter);
       }
       cycleLimiter += 1;
-      randomCandidate = Math.floor(Math.random() * COUNT);
+      randomCandidate = Math.min(
+        Math.max(0, position + Math.floor(Math.random() * SPREAD) - SPREAD / 2),
+        COUNT
+      );
     }
     console.log("randomCandidate", randomCandidate);
     if (!randomsArr.includes(randomCandidate.toString(10))) {
@@ -383,6 +387,10 @@ app.get("/get/:username/:count", async (req, res) => {
         localRes();
         const response = found;
 
+        let noData = false;
+        if (found && Array.isArray(found) && found.length === 0) {
+          noData = true;
+        }
         console.log("End");
 
         console.log("sendd response", response);
@@ -391,7 +399,12 @@ app.get("/get/:username/:count", async (req, res) => {
         var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
         console.log("It takes " + elapsedSeconds + "seconds");
 
-        res.status(200).send({ pairs: response, lookupTime: elapsedSeconds });
+        res.status(200).send({
+          pairs: response,
+          noData: noData,
+          lookupTime: elapsedSeconds,
+          position: position
+        });
       }
     });
 });
@@ -507,7 +520,7 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
 
   Pair.find(
     { word: word, toLanguage: toLanguage, fromLanguage: fromLanguage },
-    (err, response) => {
+    async (err, response) => {
       if (err) {
         console.log("err find pair", err);
       } else {
@@ -529,42 +542,25 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
         } else {
           //do actual translation
           try {
-            fetch(url, {
-              method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json"
-              }
-            })
-              .then(res => res.json())
-              .then(response => {
-                console.log("response from google: ", response);
-                console.log(
-                  "return",
-                  response.data.translations[0].translatedText
-                );
-
-                const translation =
-                  response.data.translations[0].translatedText;
-                try {
-                  Pair.create({
-                    id: id,
-                    word: word,
-                    toLanguage: toLanguage,
-                    fromLanguage: fromLanguage,
-                    translation: translation,
-                    display: true
-                  });
-                } catch (e) {
-                  console.log("error", e);
-                }
-              })
-              .catch(error => {
-                console.log(
-                  "There was an error with the translation request: ",
-                  error
-                );
+            const translationA = await cachedTranslation(
+              word,
+              fromLanguage,
+              toLanguage
+            );
+            const translation = translationA[0];
+            console.log("Pair.create", word, translation);
+            try {
+              Pair.create({
+                id: id,
+                word: word,
+                toLanguage: toLanguage,
+                fromLanguage: fromLanguage,
+                translation: translation,
+                display: true
               });
+            } catch (e) {
+              console.log("error", e);
+            }
           } catch (e) {
             console.log("translateion e", e);
           }
@@ -581,20 +577,82 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
 //   const username = req.body.username;
 // });
 
-app.post(TRANSLATE_ONE, (req, res) => {
-  const fromLanguage = req.body.fromLanguage;
-  const toLanguage = req.body.toLanguage;
-  const word = req.body.word;
+const cachedTranslation = async (word, fromLanguage, toLanguage) => {
+  const answer = await Translation.find({
+    word: word,
+    fromLanguage: fromLanguage,
+    toLanguage: toLanguage
+  }).exec();
+  // async (err, answer) => {
+  //   if (err) {
+  //     console.log("cached Trans error");
+  //   } else if (!Array.isArray(answer)) {
+  //     console.log("cached trans resp not array");
+  //   } else {
+  //     if (answer.length === 0) {
+  //       return "need";
+  //     }
+  //   }
+  // })
+  console.log("awaited", answer);
+  if (answer.length === 0) {
+    const translations = await realTranslation(word, fromLanguage, toLanguage);
+    console.log("got real trans", translations.translations[0].translatedText);
+    saveTranslation(
+      word,
+      [translations.translations[0].translatedText],
+      fromLanguage,
+      toLanguage
+    );
+    return [translations.translations[0].translatedText];
+  } else {
+    const cache = await Translation.findOne({
+      word: word,
+      fromLanguage: fromLanguage,
+      toLanguage: toLanguage
+    }).exec();
 
+    console.log("cache", cache.translations);
+    return cache.translations;
+  }
+  //   {
+  //     console.log("no trans yet");
+  //     const translation = await realTranslation(
+  //       word,
+  //       fromLanguage,
+  //       toLanguage
+  //     );
+  //     console.log("got real trans", translation);
+  //     return translation;
+  //   }
+};
+
+const saveTranslation = (word, translations, fromLanguage, toLanguage) => {
+  Translation.create(
+    {
+      word: word,
+      translations: translations,
+      fromLanguage: fromLanguage,
+      toLanguage: toLanguage
+    },
+    (err, res) => {
+      if (err) {
+        console.log("err", err);
+      } else {
+        console.log("res", res);
+      }
+    }
+  );
+};
+
+const realTranslation = async (word, fromLanguage, toLanguage) => {
   let url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
   url += "&q=" + encodeURI(word);
   url += `&source=${fromLanguage}`;
   url += `&target=${toLanguage}`;
 
-  console.log("translate", word);
-  console.log("url", url);
   try {
-    fetch(url, {
+    return await fetch(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
@@ -605,27 +663,60 @@ app.post(TRANSLATE_ONE, (req, res) => {
       .then(response => {
         console.log("response from google: ", response);
         console.log("return", response.data.translations[0].translatedText);
-        res.send(response);
-        // const translation = response.data.translations[0].translatedText;
-        // try {
-        //   Pair.create({
-        //     id: id,
-        //     word: word,
-        //     toLanguage: toLanguage,
-        //     fromLanguage: fromLanguage,
-        //     translation: translation
-        //   });
-        // } catch (e) {
-        //   console.log("error", e);
-        // }
+
+        return response.data;
       })
       .catch(error => {
         console.log("There was an error with the translation request: ", error);
-        res.status(500).send("TRANSLATE ONE FAIL");
+        return false;
       });
   } catch (e) {
     console.log("translateion e", e);
   }
+};
+
+app.post(TRANSLATE_ONE, async (req, res) => {
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+  const word = req.body.word;
+
+  translation = await cachedTranslation(word, fromLanguage, toLanguage);
+
+  console.log("cached", translation);
+  //   try {
+  //     fetch(url, {
+  //       method: "GET",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Accept: "application/json"
+  //       }
+  //     })
+  //       .then(res => res.json())
+  //       .then(response => {
+  //         console.log("response from google: ", response);
+  //         console.log("return", response.data.translations[0].translatedText);
+  //         res.send(response);
+  //         // const translation = response.data.translations[0].translatedText;
+  if (translation) {
+    // Pair.create({
+    //   id: id,
+    //   word: word,
+    //   toLanguage: toLanguage,
+    //   fromLanguage: fromLanguage,
+    //   translation: translation
+    // });
+    res.send(translation);
+  } else {
+    console.log("There was an error with the translation request: ");
+    res.status(500).send("TRANSLATE ONE FAIL");
+  }
+  //       })
+  //       .catch(error => {
+  //         res.status(500).send("TRANSLATE ONE FAIL");
+  //       });
+  //   } catch (e) {
+  //     console.log("translateion e", e);
+  //   }
 });
 
 app.post("/frequencies/translate", (req, res) => {
@@ -836,17 +927,26 @@ app.post(LOG_USER_ACTION, (req, res) => {
   const action = req.body.action;
 
   try {
+    let position = req.body.position;
     Log.create({
       word: word,
       toLanguage: toLanguage,
       fromLanguage: fromLanguage,
       username: username,
       success: success,
-      action: action
+      action: action,
+      position: position
     });
 
     console.log("LOG_SUCCESS");
-    res.send("LOG_SUCCESS");
+
+    if (success) {
+      position = position + Math.floor(250 * Math.random());
+    } else {
+      position = position - Math.floor(250 * Math.random());
+    }
+
+    res.status(200).send({ position: Math.min(DICT_SIZE, position) });
   } catch (e) {
     console.log("error", e);
     res.status(500).send("LOG_FAIL");
