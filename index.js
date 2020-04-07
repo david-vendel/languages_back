@@ -9,12 +9,17 @@ const {
   TRANSLATE_ONE,
   LOG_USER_ACTION,
   USER_PROGRESS_GET_TWENTY_FOUR,
-  USER_WORD_FLAG
+  USER_WORD_FLAG,
+  DICT_GET_TOTALWORDS
 } = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
-const DICT_SIZE = 4999;
+// let DICT_SIZE = 999;
+let MOVE_SPEED = 250;
+const UP = 1;
+const DOWN = 3;
+const SPREAD = 100;
 
 mongoose.connect("mongodb://localhost/nodekb");
 let db = mongoose.connection;
@@ -45,8 +50,10 @@ let Language = require("./models/language.js");
 let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
 let Pair = require("./models/pair.js");
+let PairHelper = require("./models/pairHelper.js");
 let Log = require("./models/log.js");
 let Translation = require("./models/translation.js");
+let Dict = require("./models/dict.js");
 
 function parseHrtimeToSeconds(hrtime) {
   var seconds = (hrtime[0] + hrtime[1] / 1e9).toFixed(3);
@@ -263,7 +270,7 @@ const getToFrom = async username => {
   return User.findOne({ username: username }, (err, suc) => {
     if (err) {
       console.log("err", err);
-      res.send("LANGUAGE_getToFrom_FAIL");
+      res.status(500).send("LANGUAGE_getToFrom_FAIL");
       return { toLanguage: toLanguage, fromLanguage: fromLanguage };
     } else {
       console.log("LANGUAGE_getToFrom_SUCCESS", suc);
@@ -274,9 +281,44 @@ const getToFrom = async username => {
   });
 };
 
+const dictGetTotalWords = async (fromLanguage, toLanguage) => {
+  const found = await Dict.findOne(
+    { fromLanguage: fromLanguage, toLanguage: toLanguage },
+    (err, suc) => {
+      if (err) {
+        console.log("err", err);
+        // return false;
+      } else {
+        console.log("dictGetTotalWords SUCCESS", suc);
+        // return suc.totalWords;
+      }
+    }
+  );
+
+  console.log("found>>", found);
+  console.log("found.tota", found.totalWords);
+  return found.totalWords;
+};
+
+app.post(DICT_GET_TOTALWORDS, async (req, res) => {
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+
+  Dict.findOne(
+    { fromLanguage: fromLanguage, toLanguage: toLanguage },
+    (err, suc) => {
+      if (err) {
+        console.log("err", err);
+        res.status(500).send("DICT_GET_TOTALWORDS FAIL");
+      } else {
+        console.log("LANGUAGE_getToFrom_SUCCESS", suc);
+        res.send({ totalWords: suc.totalWords });
+      }
+    }
+  );
+});
+
 app.post("/get", async (req, res) => {
-  const COUNT = DICT_SIZE;
-  const SPREAD = 100;
   console.time("get");
   var startTime = process.hrtime();
 
@@ -310,14 +352,29 @@ app.post("/get", async (req, res) => {
   );
   let toLanguage = "fr";
   let fromLanguage = "en";
-  let position = req.body.position;
+  let position = 50;
+  console.log("userFound", userFound);
   if (userFound) {
     toLanguage = userFound.toLanguage ? userFound.toLanguage : "fr";
     fromLanguage = userFound.fromLanguage ? userFound.fromLanguage : "en";
+    if (userFound.positions) {
+      specificLanguagePosition = userFound.positions.find(p => {
+        return p.toLanguage === toLanguage && p.fromLanguage === fromLanguage;
+      });
+      if (specificLanguagePosition) {
+        position = specificLanguagePosition.position;
+      } else {
+      }
+    } else {
+    }
   }
   console.log("toLanguage", toLanguage);
+  console.log("position", position);
 
-  console.log("Start");
+  const DICT_SIZE = await dictGetTotalWords(fromLanguage, toLanguage);
+  console.log("Start, DICT_SIZE:", DICT_SIZE);
+  position = Math.min(position, DICT_SIZE - SPREAD);
+
   let randomsArr = [];
   let index = 0;
 
@@ -337,17 +394,18 @@ app.post("/get", async (req, res) => {
     let randomCandidate = -1;
     while (
       randomCandidate === -1 ||
-      (cycleLimiter < 100 &&
+      (cycleLimiter < 50 &&
         (randomsArr.includes(randomCandidate.toString(10)) ||
           flaggedIds.includes(randomCandidate)))
     ) {
-      if (cycleLimiter >= 98) {
+      if (cycleLimiter >= 49) {
         console.log("CYCLE LIMITED", cycleLimiter);
+        position--;
       }
       cycleLimiter += 1;
       randomCandidate = Math.min(
         Math.max(0, position + Math.floor(Math.random() * SPREAD) - SPREAD / 2),
-        COUNT
+        DICT_SIZE
       );
     }
     console.log("randomCandidate", randomCandidate);
@@ -393,7 +451,7 @@ app.post("/get", async (req, res) => {
         }
         console.log("End");
 
-        console.log("sendd response", response);
+        // console.log("sendd response", response);
         console.timeEnd("get");
 
         var elapsedSeconds = parseHrtimeToSeconds(process.hrtime(startTime));
@@ -504,70 +562,163 @@ app.post("/pairs/get-all", async (req, res) => {
   );
 });
 
-const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
-  let url = `https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_TRANSLATE_API_KEY}`;
-  url += "&q=" + encodeURI(word);
-  url += `&source=${fromLanguage}`;
-  url += `&target=${toLanguage}`;
+app.post("/pair/flagDuos", async (req, res) => {
+  const toLanguage = req.body.toLanguage;
+  const fromLanguage = req.body.fromLanguage;
+  const username = req.body.username;
+  console.log("flagDuos, toLanguage", toLanguage);
 
-  console.log("translate", word);
-  console.log("url", url);
+  Pair.find(
+    { toLanguage: toLanguage, fromLanguage: fromLanguage },
+    null,
+    { sort: { id: 1 } },
+    (err, pairs) => {
+      if (err) {
+        console.log("err", err);
+        res.status(500).send("PAIR FIND FAIL");
+      } else {
+        console.log("pairs", pairs);
+        const dualIds = [];
+        const noDuplicates = [];
+        pairs.forEach(p => {
+          if (p.word === p.translation) {
+            console.log("word", p);
+            dualIds.push(p.id);
+          } else {
+            noDuplicates.push(p);
+          }
+        });
+        console.log("dual IDS", dualIds);
+        console.log("username", username);
+        // User.updateOne(
+        //   { username: username },
+        //   { duos: dualIds },
+        //   (err, dbres) => {
+        //     if (err) {
+        //       console.log("err", err);
+        //       res.status(500).send("USER UPDATE FAIL");
+        //     } else {
+        //       console.log("dbres", dbres);
+        //       res.status(200).send("USER UPDATE SUCCESS");
+        //     }
+        //   }
+        // );
+      }
+    }
+  );
+});
+
+app.post("/pair/delete", async (req, res) => {
+  const toLanguage = req.body.toLanguage;
+  const fromLanguage = req.body.fromLanguage;
+  console.log("delete, toLanguage", toLanguage);
+
+  let success = true;
+
+  Pair.deleteMany(
+    { toLanguage: toLanguage, fromLanguage: fromLanguage },
+    (err, pairs) => {
+      if (err) {
+        console.log("err", err);
+        success = false;
+        //res.status(500).send("PAIR DELETE FAIL");
+      } else {
+        // res.status(200).send("PAIR DELETE OK");
+      }
+    }
+  );
+
+  Dict.deleteOne(
+    {
+      fromLanguage: fromLanguage,
+      toLanguage: toLanguage
+    },
+    (err, pairs) => {
+      if (err) {
+        console.log("err", err);
+        success = false;
+      } else {
+        console.log("deleted from dict");
+      }
+    }
+  );
+
+  if (success) {
+    res.status(200).send("PAIR DELETE OK");
+  } else {
+    res.status(500).send("PAIR DELETE FAIL");
+  }
+});
+
+const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
+  //   console.log("translate", word);
 
   if (fromLanguage === undefined || toLanguage === undefined) {
     console.error("to or from language underined in translateThisWord");
     return;
   }
-
-  Pair.find(
+  let y = null;
+  const response = await Pair.find(
     { word: word, toLanguage: toLanguage, fromLanguage: fromLanguage },
     async (err, response) => {
       if (err) {
         console.log("err find pair", err);
       } else {
-        console.log("find pair response", response);
-        if (Array.isArray(response) && response.length > 1) {
-          console.log("duplicities in pair translated");
-          Pair.deleteOne(
-            { word: word, toLanguage: toLanguage, fromLanguage: fromLanguage },
-            (err, response) => {
-              if (err) {
-                console.log("error deleting one pair");
-              } else {
-                console.log("deleted one duplicit pair");
-              }
-            }
-          );
-        } else if (Array.isArray(response) && response.length === 1) {
-          console.log("exactly one translation already, I keep it");
-        } else {
-          //do actual translation
-          try {
-            const translationA = await cachedTranslation(
-              word,
-              fromLanguage,
-              toLanguage
-            );
-            const translation = translationA[0];
-            console.log("Pair.create", word, translation);
-            try {
-              Pair.create({
-                id: id,
-                word: word,
-                toLanguage: toLanguage,
-                fromLanguage: fromLanguage,
-                translation: translation,
-                display: true
-              });
-            } catch (e) {
-              console.log("error", e);
-            }
-          } catch (e) {
-            console.log("translateion e", e);
-          }
-        }
+        console.log("pair find response", response);
       }
     }
   );
+
+  console.log("x", response);
+
+  // console.log("find pair response", response);
+  if (Array.isArray(response) && response.length > 1) {
+    console.log("duplicities in pair translated");
+    Pair.deleteOne(
+      { word: word, toLanguage: toLanguage, fromLanguage: fromLanguage },
+      (err, responseD) => {
+        if (err) {
+          console.log("error deleting one pair");
+        } else {
+          console.log("deleted one duplicit pair");
+        }
+      }
+    );
+    return false;
+  } else if (Array.isArray(response) && response.length === 1) {
+    //   console.log("exactly one translation already, I keep it");
+    return false;
+  } else {
+    //do actual translation
+    console.log("going to await cached");
+    const translationA = await cachedTranslation(
+      word,
+      fromLanguage,
+      toLanguage
+    );
+    console.log("awaited cached");
+    const translation = translationA[0];
+    // console.log("Pair.create", word, translation);
+    if (word.toLowerCase() !== translation.toLowerCase()) {
+      // PairHelper.create({
+      //   id: id,
+      //   word: word,
+      //   toLanguage: toLanguage,
+      //   fromLanguage: fromLanguage,
+      //   translation: translation,
+      //   display: true
+      // });
+      console.log("translation", translation);
+      y = translation;
+      return translation;
+    } else {
+      console.log("- SKIPPING --");
+      return false;
+    }
+  }
+
+  console.log("x", y);
+  return y;
 };
 // //
 // app.post(PAIR_FLAG, (req, res) => {
@@ -578,11 +729,13 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
 // });
 
 const cachedTranslation = async (word, fromLanguage, toLanguage) => {
+  console.log("cachedTranslation");
   const answer = await Translation.find({
     word: word,
     fromLanguage: fromLanguage,
     toLanguage: toLanguage
   }).exec();
+  console.log("answer", answer);
   // async (err, answer) => {
   //   if (err) {
   //     console.log("cached Trans error");
@@ -594,7 +747,7 @@ const cachedTranslation = async (word, fromLanguage, toLanguage) => {
   //     }
   //   }
   // })
-  console.log("awaited", answer);
+  //   console.log("awaited", answer);
   if (answer.length === 0) {
     const translations = await realTranslation(word, fromLanguage, toLanguage);
     console.log("got real trans", translations.translations[0].translatedText);
@@ -612,7 +765,7 @@ const cachedTranslation = async (word, fromLanguage, toLanguage) => {
       toLanguage: toLanguage
     }).exec();
 
-    console.log("cache", cache.translations);
+    console.log("cache", cache);
     return cache.translations;
   }
   //   {
@@ -719,28 +872,70 @@ app.post(TRANSLATE_ONE, async (req, res) => {
   //   }
 });
 
-app.post("/frequencies/translate", (req, res) => {
+app.post("/frequencies/translate", async (req, res) => {
   const fromLanguage = req.body.fromLanguage;
   const toLanguage = req.body.toLanguage;
   console.log("freq trans");
-  Frequent.find({}, (err, frequencies) => {
+  const frequencies = await Frequent.find({}, (err, frequencies) => {
     if (err) {
       console.log("err", err);
     } else {
       console.log("frequencies", frequencies);
-      frequencies.forEach(f => {
-        console.log("I have f:", f.id, f.word);
-        //only translate if translation is not yet done
-        const translation = translateThisWord(
-          f.id,
-          f.word,
-          fromLanguage,
-          toLanguage
-        );
-      });
-      res.send("TRANSLATED");
+      return frequencies;
+      //res.send("TRANSLATED");
     }
   });
+
+  console.log("frequencies", frequencies);
+
+  let id = 0;
+  for (let i = 0; i < frequencies.length; i++) {
+    const f = frequencies[i];
+    // console.log("I have f:", f.id, f.word);
+    //only translate if translation is not yet done
+    const translation = await translateThisWord(
+      f.id,
+      f.word,
+      fromLanguage,
+      toLanguage
+    );
+
+    console.log("translated", f.word, "into", translation);
+
+    if (translation !== false) {
+      Pair.create({
+        id: id,
+        word: f.word,
+        toLanguage: toLanguage,
+        fromLanguage: fromLanguage,
+        translation: translation,
+        display: true
+      });
+      id++;
+    }
+  }
+
+  setTimeout(() => {
+    console.log(
+      "now counting Pair length for this lang combo and updating dict table"
+    );
+    const totalWords = id;
+    Dict.create(
+      {
+        fromLanguage: fromLanguage,
+        toLanguage: toLanguage,
+        totalWords: totalWords
+      },
+      (err, succ) => {
+        if (err) {
+          console.log("err", err);
+        } else {
+          console.log("dict create", succ);
+          res.send("TRANSLATED and created", totalWords, "pairs");
+        }
+      }
+    );
+  }, 1000);
 });
 
 app.post(PAIR_EDIT, (req, res) => {
@@ -899,6 +1094,15 @@ app.post("/userSettings/get", (req, res) => {
         response.flaggedWords = suc.flaggedWords;
       }
 
+      if (typeArr.includes("positions")) {
+        response.position = suc.positions.find(p => {
+          return (
+            p.toLanguage === suc.toLanguage &&
+            p.fromLanguage === suc.fromLanguage
+          );
+        }).position;
+      }
+
       console.log("response", response);
       res.status(200).send(response);
     }
@@ -918,7 +1122,7 @@ app.post("/userSettings/get", (req, res) => {
 //   });
 // });
 
-app.post(LOG_USER_ACTION, (req, res) => {
+app.post(LOG_USER_ACTION, async (req, res) => {
   const word = req.body.word;
   const fromLanguage = req.body.fromLanguage;
   const toLanguage = req.body.toLanguage;
@@ -941,12 +1145,76 @@ app.post(LOG_USER_ACTION, (req, res) => {
     console.log("LOG_SUCCESS");
 
     if (success) {
-      position = position + Math.floor(250 * Math.random());
+      newPosition = position + Math.floor(MOVE_SPEED * UP * Math.random());
     } else {
-      position = position - Math.floor(250 * Math.random());
+      newPosition = position - Math.floor(MOVE_SPEED * DOWN * Math.random());
     }
 
-    res.status(200).send({ position: Math.min(DICT_SIZE, position) });
+    const DICT_SIZE = await dictGetTotalWords(fromLanguage, toLanguage);
+    console.log("DICT_SIZE", DICT_SIZE);
+    newPosition = Math.max(0, Math.min(DICT_SIZE, newPosition));
+
+    let positions = []; //positions is array of objects {position, fromLanguage, toLanguage}
+    try {
+      positions = await User.findOne(
+        { username: username },
+
+        (err, positions) => {
+          if (err) {
+            console.log("error getting user positions");
+            res.send("error getting user positions");
+          } else {
+            console.log("user positions:", positions);
+            return positions;
+          }
+        }
+      ).positions;
+      console.log("User find One yes");
+    } catch (e) {
+      console.log("catch e", e);
+      positions = [
+        {
+          fromLanguage: fromLanguage,
+          toLanguage: toLanguage,
+          position: newPosition
+        }
+      ];
+    }
+
+    console.log("positions awaited", positions);
+
+    if (!positions) {
+      positions = [
+        {
+          fromLanguage: fromLanguage,
+          toLanguage: toLanguage,
+          position: newPosition
+        }
+      ];
+    }
+    positions.forEach(p => {
+      if (p.fromLanguage === fromLanguage && p.toLanguage === toLanguage) {
+        p.position = newPosition;
+      }
+    });
+    //teraz mi treba vratit pozicie na FE a updatnut to tam
+    await User.updateOne(
+      { username: username },
+      { positions: positions },
+      (err, suc) => {
+        if (err) {
+          console.log("err", err);
+          res.send("error updating user positions");
+        } else {
+          console.log("positions updated successfully");
+          return;
+          //res.send("userSettings_TO_SUCCESS");
+        }
+      }
+    );
+
+    console.log("sending positions", positions);
+    res.status(200).send({ position: newPosition });
   } catch (e) {
     console.log("error", e);
     res.status(500).send("LOG_FAIL");
@@ -975,7 +1243,7 @@ app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
       if (err) {
         console.log("err", err);
       } else {
-        console.log("result", result);
+        //console.log("result", result);
         let good = 0;
         let bad = 0;
         result.forEach(r => {

@@ -33,8 +33,12 @@ let userSchema = mongoose.Schema({
     type: Object,
     required: false
   },
-  progress: {
-    type: Number,
+  positions: {
+    type: Object,
+    required: false
+  },
+  moveSpeed: {
+    type: Array, // includes object of position, toLanguage, fromLanguage
     required: false
   }
 });
