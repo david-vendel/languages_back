@@ -50,7 +50,6 @@ let Language = require("./models/language.js");
 let User = require("./models/user.js");
 let Frequent = require("./models/frequent.js");
 let Pair = require("./models/pair.js");
-let PairHelper = require("./models/pairHelper.js");
 let Log = require("./models/log.js");
 let Translation = require("./models/translation.js");
 let Dict = require("./models/dict.js");
@@ -700,14 +699,6 @@ const translateThisWord = async (id, word, fromLanguage, toLanguage) => {
     const translation = translationA[0];
     // console.log("Pair.create", word, translation);
     if (word.toLowerCase() !== translation.toLowerCase()) {
-      // PairHelper.create({
-      //   id: id,
-      //   word: word,
-      //   toLanguage: toLanguage,
-      //   fromLanguage: fromLanguage,
-      //   translation: translation,
-      //   display: true
-      // });
       console.log("translation", translation);
       y = translation;
       return translation;
