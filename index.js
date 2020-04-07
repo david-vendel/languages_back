@@ -19,7 +19,7 @@ const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 let MOVE_SPEED = 250;
 const UP = 1;
 const DOWN = 3;
-const SPREAD = 100;
+const SPREAD = 40;
 
 mongoose.connect("mongodb://localhost/nodekb");
 let db = mongoose.connection;
@@ -269,15 +269,50 @@ const getToFrom = async username => {
   return User.findOne({ username: username }, (err, suc) => {
     if (err) {
       console.log("err", err);
-      res.status(500).send("LANGUAGE_getToFrom_FAIL");
-      return { toLanguage: toLanguage, fromLanguage: fromLanguage };
+      //   return { toLanguage: toLanguage, fromLanguage: fromLanguage };
+      return false;
     } else {
       console.log("LANGUAGE_getToFrom_SUCCESS", suc);
       console.timeEnd("getToFrom");
-
       return { toLanguage: suc.toLanguage, fromLanguage: suc.fromLanguage };
     }
   });
+};
+
+const getMoveSpeed = async username => {
+  console.time("getMoveSpeed", username);
+
+  return await User.findOne({ username: username }, (err, suc) => {
+    if (err) {
+      console.log("err", err);
+      return false;
+    } else {
+      return { moveSpeed: suc.moveSpeed };
+    }
+  });
+};
+
+const setMoveSpeed = async (username, fromLanguage, toLanguage, moveSpeed) => {
+  console.time("setMoveSpeed", username, moveSpeed);
+
+  return User.updateOne(
+    { username: username },
+    {
+      moveSpeed: {
+        moveSpeed: moveSpeed,
+        fromLanguage: fromLanguage,
+        toLanguage: toLanguage
+      }
+    },
+    (err, suc) => {
+      if (err) {
+        console.log("err", err);
+        return false;
+      } else {
+        return true;
+      }
+    }
+  );
 };
 
 const dictGetTotalWords = async (fromLanguage, toLanguage) => {
@@ -296,7 +331,7 @@ const dictGetTotalWords = async (fromLanguage, toLanguage) => {
 
   console.log("found>>", found);
   console.log("found.tota", found.totalWords);
-  return found.totalWords;
+  return found;
 };
 
 app.post(DICT_GET_TOTALWORDS, async (req, res) => {
@@ -370,7 +405,9 @@ app.post("/get", async (req, res) => {
   console.log("toLanguage", toLanguage);
   console.log("position", position);
 
-  const DICT_SIZE = await dictGetTotalWords(fromLanguage, toLanguage);
+  const dict = await dictGetTotalWords(fromLanguage, toLanguage);
+  DICT_SIZE = dict.totalWords;
+
   console.log("Start, DICT_SIZE:", DICT_SIZE);
   position = Math.min(position, DICT_SIZE - SPREAD);
 
@@ -387,6 +424,7 @@ app.post("/get", async (req, res) => {
   }
 
   console.log("flaggedIds", flaggedIds);
+  console.log(" SPREAD, DICT_SIZE, position ", SPREAD, DICT_SIZE, position);
 
   while (randomsArr.length < count) {
     cycleLimiter = 0;
@@ -1094,6 +1132,15 @@ app.post("/userSettings/get", (req, res) => {
         }).position;
       }
 
+      if (typeArr.includes("moveSpeed")) {
+        response.moveSpeed = suc.moveSpeed.find(p => {
+          return (
+            p.toLanguage === suc.toLanguage &&
+            p.fromLanguage === suc.fromLanguage
+          );
+        }).moveSpeed;
+      }
+
       console.log("response", response);
       res.status(200).send(response);
     }
@@ -1135,19 +1182,38 @@ app.post(LOG_USER_ACTION, async (req, res) => {
 
     console.log("LOG_SUCCESS");
 
+    const dict = await dictGetTotalWords(fromLanguage, toLanguage);
+    DICT_SIZE = dict.totalWords;
+
+    const user = await getMoveSpeed(username);
+    console.log("move speed", user);
+    MOVE_SPEED = 250;
+    if (
+      user.moveSpeed &&
+      Array.isArray(user.moveSpeed) &&
+      user.moveSpeed.length
+    ) {
+      const skus = user.moveSpeed.find(
+        m => m.fromLanguage === fromLanguage && m.toLanguage === m.toLanguage
+      );
+      if (skus) {
+        MOVE_SPEED = skus.moveSpeed;
+      }
+    }
+
+    console.log(">>>success", success, position, MOVE_SPEED);
     if (success) {
       newPosition = position + Math.floor(MOVE_SPEED * UP * Math.random());
     } else {
       newPosition = position - Math.floor(MOVE_SPEED * DOWN * Math.random());
     }
 
-    const DICT_SIZE = await dictGetTotalWords(fromLanguage, toLanguage);
     console.log("DICT_SIZE", DICT_SIZE);
     newPosition = Math.max(0, Math.min(DICT_SIZE, newPosition));
-
+    console.log("newPosition", newPosition);
     let positions = []; //positions is array of objects {position, fromLanguage, toLanguage}
     try {
-      positions = await User.findOne(
+      positionsA = await User.findOne(
         { username: username },
 
         (err, positions) => {
@@ -1155,12 +1221,12 @@ app.post(LOG_USER_ACTION, async (req, res) => {
             console.log("error getting user positions");
             res.send("error getting user positions");
           } else {
-            console.log("user positions:", positions);
             return positions;
           }
         }
-      ).positions;
-      console.log("User find One yes");
+      );
+      //   console.log("User find One yes", positionsA);
+      positions = positionsA.positions;
     } catch (e) {
       console.log("catch e", e);
       positions = [
@@ -1188,6 +1254,8 @@ app.post(LOG_USER_ACTION, async (req, res) => {
         p.position = newPosition;
       }
     });
+
+    console.log("Updated positions ", positions);
     //teraz mi treba vratit pozicie na FE a updatnut to tam
     await User.updateOne(
       { username: username },
@@ -1204,8 +1272,12 @@ app.post(LOG_USER_ACTION, async (req, res) => {
       }
     );
 
+    const newMoveSpeed = Math.max(10, MOVE_SPEED - 10);
+
+    setMoveSpeed(username, fromLanguage, toLanguage, newMoveSpeed);
+
     console.log("sending positions", positions);
-    res.status(200).send({ position: newPosition });
+    res.status(200).send({ position: newPosition, moveSpeed: newMoveSpeed });
   } catch (e) {
     console.log("error", e);
     res.status(500).send("LOG_FAIL");
