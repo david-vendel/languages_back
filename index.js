@@ -366,10 +366,10 @@ app.post("/get", async (req, res) => {
       ? parseInt(req.body.count)
       : 4;
 
-  let localRes = null;
-  const promise = new Promise(resolve => {
-    localRes = resolve;
-  });
+  //   let localRes = null;
+  //   const promise = new Promise(resolve => {
+  //     localRes = resolve;
+  //   });
 
   const username = req.body.username;
   //const toFrom = await getToFrom(username); //here could be some optimalization, to receive toFrom from React if it has it
@@ -468,7 +468,7 @@ app.post("/get", async (req, res) => {
   })
     .where("id")
     .in(randomsArr)
-    .exec((err, found) => {
+    .exec(async (err, found) => {
       if (err) {
         console.log("foundMore err");
         res.status(500).send("PAIR_FIND_ERR");
@@ -479,11 +479,47 @@ app.post("/get", async (req, res) => {
         //   word: found.word,
         //   translation: found.translation
         // });
-        localRes();
-        const response = found;
+        // localRes();
+
+        const words = found.map(f => f.word);
+
+        wordsStats = await getWordsStats(
+          words,
+          fromLanguage,
+          toLanguage,
+          username
+        );
+
+        console.log("wordsStats", wordsStats);
+
+        const response = found.map(r => {
+          let goodBad = [];
+          wordsStats.forEach(w => {
+            if (r.word === w.word) {
+              if (w.success) {
+                console.log("good!");
+                goodBad.push(1);
+              } else {
+                console.log("bad!");
+                goodBad.push(0);
+              }
+            }
+          });
+          return {
+            id: r.id,
+            fromLanguage: r.fromLanguage,
+            toLanguage: r.toLanguage,
+            word: r.word,
+            translation: r.translation,
+            display: r.display,
+            goodBad: goodBad
+          };
+        });
+
+        console.log("found enahnced", response);
 
         let noData = false;
-        if (found && Array.isArray(found) && found.length === 0) {
+        if (response && Array.isArray(response) && response.length === 0) {
           noData = true;
         }
         console.log("End");
@@ -503,6 +539,16 @@ app.post("/get", async (req, res) => {
       }
     });
 });
+
+getWordsStats = async (words, fromLanguage, toLanguage, username) => {
+  return await Log.find({
+    toLanguage: toLanguage,
+    fromLanguage: fromLanguage,
+    username: username
+  })
+    .where("word")
+    .in(words);
+};
 
 //ass submit POST route
 app.post("/languages/add", (req, res) => {
@@ -1124,21 +1170,31 @@ app.post("/userSettings/get", (req, res) => {
       }
 
       if (typeArr.includes("positions")) {
-        response.position = suc.positions.find(p => {
+        const helpx = suc.positions.find(p => {
           return (
             p.toLanguage === suc.toLanguage &&
             p.fromLanguage === suc.fromLanguage
           );
-        }).position;
+        });
+        if (helpx && helpx.position) {
+          response.position = helpx.position;
+        } else {
+          response.position = 0;
+        }
       }
 
       if (typeArr.includes("moveSpeed")) {
-        response.moveSpeed = suc.moveSpeed.find(p => {
+        const helpy = suc.moveSpeed.find(p => {
           return (
             p.toLanguage === suc.toLanguage &&
             p.fromLanguage === suc.fromLanguage
           );
-        }).moveSpeed;
+        });
+        if (helpy && helpy.moveSpeed) {
+          response.moveSpeed = helpy.moveSpeed;
+        } else {
+          response.moveSpeed = 0;
+        }
       }
 
       console.log("response", response);
