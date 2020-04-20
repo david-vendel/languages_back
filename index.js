@@ -10,7 +10,7 @@ const {
   LOG_USER_ACTION,
   USER_PROGRESS_GET_TWENTY_FOUR,
   USER_WORD_FLAG,
-  DICT_GET_TOTALWORDS
+  DICT_GET_TOTALWORDS,
 } = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
@@ -20,6 +20,9 @@ let MOVE_SPEED = 250;
 const UP = 1;
 const DOWN = 3;
 const SPREAD = 40;
+
+const SERVER_IP = process.env.SERVER_IP;
+const PORT = process.env.NODE_PORT || 6900;
 
 mongoose.connect("mongodb://localhost/nodekb");
 let db = mongoose.connection;
@@ -38,7 +41,7 @@ db.once("open", () => {
 // });
 
 //Check for db errors
-db.on("error", err => {
+db.on("error", (err) => {
   console.log("err", err);
 });
 
@@ -64,7 +67,7 @@ let current = "";
 app.use("/public", express.static(path.join(__dirname, "static")));
 
 var cors = require("cors");
-app.use(cors({ credentials: true, origin: "http://localhost:3000" }));
+app.use(cors({ credentials: true, origin: SERVER_IP }));
 
 // app.use(function(req, res, next) {
 //   res.header("Access-Control-Allow-Origin", "http://localhost:3000"); // update to match the domain you will make the request from
@@ -184,7 +187,7 @@ app.post("/signup", (req, res) => {
             password: signup.password,
             fromLanguage: "en",
             toLanguage: "fr",
-            auth: userToken
+            auth: userToken,
           },
           (err, resp) => {
             if (err) {
@@ -252,7 +255,7 @@ readFile = (name, code) => {
       console.log("object", object);
       console.log("red file to variable.");
 
-      fs.writeFile("list.txt", JSON.stringify(object), err => {
+      fs.writeFile("list.txt", JSON.stringify(object), (err) => {
         if (err) {
           console.log(err);
         } else {
@@ -263,7 +266,7 @@ readFile = (name, code) => {
   });
 };
 
-const getToFrom = async username => {
+const getToFrom = async (username) => {
   console.time("getToFrom", username);
 
   return User.findOne({ username: username }, (err, suc) => {
@@ -279,7 +282,7 @@ const getToFrom = async username => {
   });
 };
 
-const getMoveSpeed = async username => {
+const getMoveSpeed = async (username) => {
   console.time("getMoveSpeed", username);
 
   return await User.findOne({ username: username }, (err, suc) => {
@@ -293,16 +296,14 @@ const getMoveSpeed = async username => {
 };
 
 const setMoveSpeed = async (username, fromLanguage, toLanguage, moveSpeed) => {
-  console.time("setMoveSpeed", username, moveSpeed);
-
   return User.updateOne(
     { username: username },
     {
       moveSpeed: {
         moveSpeed: moveSpeed,
         fromLanguage: fromLanguage,
-        toLanguage: toLanguage
-      }
+        toLanguage: toLanguage,
+      },
     },
     (err, suc) => {
       if (err) {
@@ -392,7 +393,7 @@ app.post("/get", async (req, res) => {
     toLanguage = userFound.toLanguage ? userFound.toLanguage : "fr";
     fromLanguage = userFound.fromLanguage ? userFound.fromLanguage : "en";
     if (userFound.positions) {
-      specificLanguagePosition = userFound.positions.find(p => {
+      specificLanguagePosition = userFound.positions.find((p) => {
         return p.toLanguage === toLanguage && p.fromLanguage === fromLanguage;
       });
       if (specificLanguagePosition) {
@@ -416,7 +417,7 @@ app.post("/get", async (req, res) => {
 
   const flaggedIds = [];
   if (userFound.flaggedWords && userFound.flaggedWords.length > 0) {
-    userFound.flaggedWords.forEach(f => {
+    userFound.flaggedWords.forEach((f) => {
       if (f.language === fromLanguage) {
         flaggedIds.push(f.id);
       }
@@ -461,7 +462,7 @@ app.post("/get", async (req, res) => {
   // getting count of word pairs for lesson request
   await Pair.find({
     toLanguage: toLanguage,
-    fromLanguage: fromLanguage
+    fromLanguage: fromLanguage,
     // display: true
     //translation: { $ne: "" },
     //word: { $ne: "" }
@@ -481,7 +482,7 @@ app.post("/get", async (req, res) => {
         // });
         // localRes();
 
-        const words = found.map(f => f.word);
+        const words = found.map((f) => f.word);
 
         wordsStats = await getWordsStats(
           words,
@@ -492,9 +493,9 @@ app.post("/get", async (req, res) => {
 
         console.log("wordsStats", wordsStats);
 
-        const response = found.map(r => {
+        const response = found.map((r) => {
           let goodBad = [];
-          wordsStats.forEach(w => {
+          wordsStats.forEach((w) => {
             if (r.word === w.word) {
               if (w.success) {
                 console.log("good!");
@@ -512,7 +513,7 @@ app.post("/get", async (req, res) => {
             word: r.word,
             translation: r.translation,
             display: r.display,
-            goodBad: goodBad
+            goodBad: goodBad,
           };
         });
 
@@ -534,7 +535,7 @@ app.post("/get", async (req, res) => {
           pairs: response,
           noData: noData,
           lookupTime: elapsedSeconds,
-          position: position
+          position: position,
         });
       }
     });
@@ -544,7 +545,7 @@ getWordsStats = async (words, fromLanguage, toLanguage, username) => {
   return await Log.find({
     toLanguage: toLanguage,
     fromLanguage: fromLanguage,
-    username: username
+    username: username,
   })
     .where("word")
     .in(words);
@@ -580,7 +581,7 @@ app.post("/languages/add", (req, res) => {
           Language.create(
             {
               word: req.body.word,
-              translation: req.body.translation
+              translation: req.body.translation,
             } /*,
             (err, obj) => {
               if (err) {
@@ -663,7 +664,7 @@ app.post("/pair/flagDuos", async (req, res) => {
         console.log("pairs", pairs);
         const dualIds = [];
         const noDuplicates = [];
-        pairs.forEach(p => {
+        pairs.forEach((p) => {
           if (p.word === p.translation) {
             console.log("word", p);
             dualIds.push(p.id);
@@ -714,7 +715,7 @@ app.post("/pair/delete", async (req, res) => {
   Dict.deleteOne(
     {
       fromLanguage: fromLanguage,
-      toLanguage: toLanguage
+      toLanguage: toLanguage,
     },
     (err, pairs) => {
       if (err) {
@@ -808,7 +809,7 @@ const cachedTranslation = async (word, fromLanguage, toLanguage) => {
   const answer = await Translation.find({
     word: word,
     fromLanguage: fromLanguage,
-    toLanguage: toLanguage
+    toLanguage: toLanguage,
   }).exec();
   console.log("answer", answer);
   // async (err, answer) => {
@@ -837,7 +838,7 @@ const cachedTranslation = async (word, fromLanguage, toLanguage) => {
     const cache = await Translation.findOne({
       word: word,
       fromLanguage: fromLanguage,
-      toLanguage: toLanguage
+      toLanguage: toLanguage,
     }).exec();
 
     console.log("cache", cache);
@@ -861,7 +862,7 @@ const saveTranslation = (word, translations, fromLanguage, toLanguage) => {
       word: word,
       translations: translations,
       fromLanguage: fromLanguage,
-      toLanguage: toLanguage
+      toLanguage: toLanguage,
     },
     (err, res) => {
       if (err) {
@@ -884,17 +885,17 @@ const realTranslation = async (word, fromLanguage, toLanguage) => {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json"
-      }
+        Accept: "application/json",
+      },
     })
-      .then(res => res.json())
-      .then(response => {
+      .then((res) => res.json())
+      .then((response) => {
         console.log("response from google: ", response);
         console.log("return", response.data.translations[0].translatedText);
 
         return response.data;
       })
-      .catch(error => {
+      .catch((error) => {
         console.log("There was an error with the translation request: ", error);
         return false;
       });
@@ -984,7 +985,7 @@ app.post("/frequencies/translate", async (req, res) => {
         toLanguage: toLanguage,
         fromLanguage: fromLanguage,
         translation: translation,
-        display: true
+        display: true,
       });
       id++;
     }
@@ -999,7 +1000,7 @@ app.post("/frequencies/translate", async (req, res) => {
       {
         fromLanguage: fromLanguage,
         toLanguage: toLanguage,
-        totalWords: totalWords
+        totalWords: totalWords,
       },
       (err, succ) => {
         if (err) {
@@ -1048,9 +1049,9 @@ app.post(USER_WORD_FLAG, (req, res) => {
     User.updateOne(
       { username: username },
       {
-        $push: { flaggedWords: { language: fromLanguage, id: id, word: word } }
+        $push: { flaggedWords: { language: fromLanguage, id: id, word: word } },
       },
-      function(error, success) {
+      function (error, success) {
         if (error) {
           console.log(error);
           res.status(500).send("updated fail");
@@ -1064,9 +1065,9 @@ app.post(USER_WORD_FLAG, (req, res) => {
     User.updateOne(
       { username: username },
       {
-        $pull: { flaggedWords: { language: fromLanguage, word: word } }
+        $pull: { flaggedWords: { language: fromLanguage, word: word } },
       },
-      function(error, success) {
+      function (error, success) {
         if (error) {
           console.log(error);
           res.status(500).send("removed flagged fail");
@@ -1146,7 +1147,7 @@ app.post("/userSettings/get", (req, res) => {
       const typeArr = JSON.parse(req.body.type);
 
       let response = {
-        message: "LANGUAGE_TO_SUCCESS"
+        message: "LANGUAGE_TO_SUCCESS",
       };
 
       if (typeArr.includes("username")) {
@@ -1170,12 +1171,15 @@ app.post("/userSettings/get", (req, res) => {
       }
 
       if (typeArr.includes("positions")) {
-        const helpx = suc.positions.find(p => {
-          return (
-            p.toLanguage === suc.toLanguage &&
-            p.fromLanguage === suc.fromLanguage
-          );
-        });
+        const helpx = suc.positions
+          ? suc.positions.find((p) => {
+              return (
+                p.toLanguage === suc.toLanguage &&
+                p.fromLanguage === suc.fromLanguage
+              );
+            })
+          : undefined;
+        console.log("helpx", helpx);
         if (helpx && helpx.position) {
           response.position = helpx.position;
         } else {
@@ -1184,7 +1188,7 @@ app.post("/userSettings/get", (req, res) => {
       }
 
       if (typeArr.includes("moveSpeed")) {
-        const helpy = suc.moveSpeed.find(p => {
+        const helpy = suc.moveSpeed.find((p) => {
           return (
             p.toLanguage === suc.toLanguage &&
             p.fromLanguage === suc.fromLanguage
@@ -1233,7 +1237,7 @@ app.post(LOG_USER_ACTION, async (req, res) => {
       username: username,
       success: success,
       action: action,
-      position: position
+      position: position,
     });
 
     console.log("LOG_SUCCESS");
@@ -1250,7 +1254,7 @@ app.post(LOG_USER_ACTION, async (req, res) => {
       user.moveSpeed.length
     ) {
       const skus = user.moveSpeed.find(
-        m => m.fromLanguage === fromLanguage && m.toLanguage === m.toLanguage
+        (m) => m.fromLanguage === fromLanguage && m.toLanguage === m.toLanguage
       );
       if (skus) {
         MOVE_SPEED = skus.moveSpeed;
@@ -1289,8 +1293,8 @@ app.post(LOG_USER_ACTION, async (req, res) => {
         {
           fromLanguage: fromLanguage,
           toLanguage: toLanguage,
-          position: newPosition
-        }
+          position: newPosition,
+        },
       ];
     }
 
@@ -1301,15 +1305,28 @@ app.post(LOG_USER_ACTION, async (req, res) => {
         {
           fromLanguage: fromLanguage,
           toLanguage: toLanguage,
-          position: newPosition
-        }
+          position: newPosition,
+        },
       ];
     }
-    positions.forEach(p => {
-      if (p.fromLanguage === fromLanguage && p.toLanguage === toLanguage) {
-        p.position = newPosition;
-      }
-    });
+
+    if (
+      !positions.find((p) => {
+        return p.fromLanguage === fromLanguage && p.toLanguage === toLanguage;
+      })
+    ) {
+      positions.push({
+        fromLanguage: fromLanguage,
+        toLanguage: toLanguage,
+        position: newPosition,
+      });
+    } else {
+      positions.forEach((p) => {
+        if (p.fromLanguage === fromLanguage && p.toLanguage === toLanguage) {
+          p.position = newPosition;
+        }
+      });
+    }
 
     console.log("Updated positions ", positions);
     //teraz mi treba vratit pozicie na FE a updatnut to tam
@@ -1355,9 +1372,9 @@ app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
           createdAt: { $gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
           toLanguage: toLanguage,
           fromLanguage: fromLanguage,
-          username: username
-        }
-      }
+          username: username,
+        },
+      },
     ]).exec((err, result) => {
       if (err) {
         console.log("err", err);
@@ -1365,7 +1382,7 @@ app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
         //console.log("result", result);
         let good = 0;
         let bad = 0;
-        result.forEach(r => {
+        result.forEach((r) => {
           if (r.success) {
             good++;
           } else {
@@ -1380,8 +1397,8 @@ app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
           last24hours: {
             good: good,
             bad: bad,
-            lookupTime: elapsedSeconds
-          }
+            lookupTime: elapsedSeconds,
+          },
         });
       }
     });
@@ -1419,7 +1436,7 @@ app.post("/frequency/addArray", (req, res) => {
       } else {
         console.log("suc", suc);
 
-        array.forEach(word => {
+        array.forEach((word) => {
           console.log("id", id, word);
           Frequent.create({ id: id, word: word }, (err, res) => {
             if (err) {
@@ -1441,4 +1458,7 @@ app.post("/frequency/addArray", (req, res) => {
   }
 });
 
-app.listen(8000);
+const port = process.env.PORT || PORT;
+const server = app.listen(port, () => {
+  console.log("Connected to port " + port);
+});
