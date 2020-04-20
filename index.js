@@ -23,6 +23,7 @@ const SPREAD = 40;
 
 const SERVER_IP = process.env.SERVER_IP;
 const PORT = process.env.NODE_PORT || 6900;
+console.log("port", PORT);
 
 mongoose.connect("mongodb://localhost/nodekb");
 let db = mongoose.connection;
@@ -1458,7 +1459,7 @@ app.post("/frequency/addArray", (req, res) => {
   }
 });
 
-const port = process.env.PORT || PORT;
+const port = PORT;
 const server = app.listen(port, () => {
   console.log("Connected to port " + port);
 });
