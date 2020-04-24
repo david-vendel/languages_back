@@ -3,7 +3,6 @@ const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 const fetch = require("node-fetch");
 
 const cachedTranslation = async (word, fromLanguage, toLanguage) => {
-  console.log("cachedTranslation");
   if (fromLanguage === toLanguage) {
     return [word];
   }
@@ -12,14 +11,22 @@ const cachedTranslation = async (word, fromLanguage, toLanguage) => {
     fromLanguage: fromLanguage,
     toLanguage: toLanguage,
   }).exec();
-  console.log("answer", answer);
+  //   console.log("answer", answer);
 
   if (answer.length === 0) {
+    const totalCount = await Translation.countDocuments({}, (err, c) => {
+      console.log("count", c);
+      return c;
+    });
+    if (totalCount > 10000) {
+      return false;
+    }
+
     const translations = await realTranslation(word, fromLanguage, toLanguage);
     if (!translations) {
       return false;
     }
-    console.log("got real trans", translations.translations[0].translatedText);
+    // console.log("got real trans", translations.translations[0].translatedText);
     saveTranslation(
       word,
       [translations.translations[0].translatedText],
@@ -34,7 +41,6 @@ const cachedTranslation = async (word, fromLanguage, toLanguage) => {
       toLanguage: toLanguage,
     }).exec();
 
-    console.log("cache", cache);
     return cache.translations;
   }
 };
@@ -49,7 +55,7 @@ const realTranslation = async (word, fromLanguage, toLanguage) => {
     console.log("toLanguage is undefined");
     return false;
   }
-  console.log("url", url);
+  //   console.log("url", url);
   try {
     return await fetch(url, {
       method: "GET",
@@ -60,11 +66,11 @@ const realTranslation = async (word, fromLanguage, toLanguage) => {
     })
       .then((res) => res.json())
       .then((response) => {
-        console.log("response from google: ", response);
+        // console.log("response from google: ", response);
         if (response.error) {
           return false;
         }
-        console.log("return", response.data.translations[0].translatedText);
+        // console.log("return", response.data.translations[0].translatedText);
 
         return response.data;
       })
@@ -87,9 +93,9 @@ const saveTranslation = (word, translations, fromLanguage, toLanguage) => {
     },
     (err, res) => {
       if (err) {
-        console.log("err", err);
+        // console.log("err", err);
       } else {
-        console.log("res", res);
+        // console.log("res", res);
       }
     }
   );

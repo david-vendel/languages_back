@@ -7,17 +7,14 @@ let index = require("./../index.js");
 let fun = require("./../fun.js");
 router = express.Router();
 
-console.log("index", index);
-console.log("fun", fun);
-
 router.use(function timeLog(req, res, next) {
-  console.log("Time: ", Date.now());
+  //   console.log("Time: ", Date.now());
   next();
 });
 
 router.post(ALL_TRANSLATIONS_GET, async (req, res, next) => {
-  console.log("req body", req.body);
-  const word = req.body.word;
+  //   console.log("req body", req.body);
+  const word = req.body.word.slice(0, 20);
   let languages = req.body.languages;
   let part = req.body.part;
   let outOf = req.body.outOf;
@@ -134,7 +131,7 @@ router.post(ALL_TRANSLATIONS_GET, async (req, res, next) => {
 
   let fromLanguage = "en";
 
-  console.log("word", word, "languages", languages);
+  //   console.log("word", word, "languages", languages);
   let response = [];
 
   //   .slice(
@@ -158,7 +155,6 @@ router.post(ALL_TRANSLATIONS_GET, async (req, res, next) => {
       });
     }
   }
-  console.log("FINISH");
   res.send(response);
 });
 
