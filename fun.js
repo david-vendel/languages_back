@@ -45,6 +45,10 @@ const realTranslation = async (word, fromLanguage, toLanguage) => {
   url += `&source=${fromLanguage}`;
   url += `&target=${toLanguage}`;
 
+  if (toLanguage === undefined) {
+    console.log("toLanguage is undefined");
+    return false;
+  }
   console.log("url", url);
   try {
     return await fetch(url, {

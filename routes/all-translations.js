@@ -19,6 +19,8 @@ router.post(ALL_TRANSLATIONS_GET, async (req, res, next) => {
   console.log("req body", req.body);
   const word = req.body.word;
   let languages = req.body.languages;
+  let part = req.body.part;
+  let outOf = req.body.outOf;
 
   if (!languages) {
     languages = {
@@ -135,7 +137,16 @@ router.post(ALL_TRANSLATIONS_GET, async (req, res, next) => {
   console.log("word", word, "languages", languages);
   let response = [];
 
-  for (let i = 0; i < Object.keys(languages).length; i++) {
+  //   .slice(
+  //     (languages.length * (part - 1)) / outOf,
+  //     languages.length * (part / outOf)
+  //   )
+
+  for (
+    let i = Math.floor((Object.keys(languages).length * (part - 1)) / outOf);
+    i < Math.floor((Object.keys(languages).length * part) / outOf);
+    i++
+  ) {
     const l = Object.keys(languages)[i];
     const ln = Object.values(languages)[i];
     const translationA = await fun.cachedTranslation(word, fromLanguage, l);
