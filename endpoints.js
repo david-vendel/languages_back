@@ -4,6 +4,7 @@ const LOG_USER_ACTION = `/log/userAction`;
 const USER_PROGRESS_GET_TWENTY_FOUR = `/log/userProgress24/get`;
 const USER_WORD_FLAG = `/userSettings/word/flag`;
 const DICT_GET_TOTALWORDS = `/dict/totalWords/get`;
+const ALL_TRANSLATIONS_GET = `/fire`;
 
 module.exports = {
   PAIR_EDIT,
@@ -11,5 +12,6 @@ module.exports = {
   LOG_USER_ACTION,
   USER_PROGRESS_GET_TWENTY_FOUR,
   USER_WORD_FLAG,
-  DICT_GET_TOTALWORDS
+  DICT_GET_TOTALWORDS,
+  ALL_TRANSLATIONS_GET,
 };

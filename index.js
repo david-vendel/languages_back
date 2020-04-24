@@ -11,6 +11,7 @@ const {
   USER_PROGRESS_GET_TWENTY_FOUR,
   USER_WORD_FLAG,
   DICT_GET_TOTALWORDS,
+  ALL_TRANSLATIONS_GET,
 } = require("./endpoints");
 require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
@@ -84,6 +85,9 @@ app.use(cors({ credentials: true, origin: SERVER_IP }));
 app.use(bodyParser.urlencoded({ extended: false }));
 // parse application/json
 app.use(bodyParser.json());
+
+const allTranslations = require("./routes/all-translations.js");
+app.use("/all-translations", allTranslations);
 
 app.get("/", (req, res) => {
   res.send("Hello World");
@@ -1145,6 +1149,10 @@ app.post("/userSettings/get", (req, res) => {
     } else {
       console.log("LANGUAGE_TO_SUCCESS", suc);
 
+      if (!suc) {
+        res.status(206).send({});
+        return;
+      }
       const typeArr = JSON.parse(req.body.type);
 
       let response = {
@@ -1463,3 +1471,8 @@ const port = PORT;
 const server = app.listen(port, () => {
   console.log("Connected to port " + port);
 });
+
+module.exports = {
+  cachedTranslation: cachedTranslation,
+  x: "dd",
+};
