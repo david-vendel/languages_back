@@ -3,24 +3,26 @@ let mongoose = require("mongoose");
 let translationSchema = mongoose.Schema({
   word: {
     type: String,
-    required: true
+    required: true,
   },
 
   translations: {
     type: Array,
-    required: false
+    required: false,
   },
 
   fromLanguage: {
     type: String,
-    required: true
+    required: true,
   },
 
   toLanguage: {
     type: String,
-    required: true
-  }
+    required: true,
+  },
 });
+
+translationSchema.set("timestamps", true);
 
 let Translation = (module.exports = mongoose.model(
   "Translation",
