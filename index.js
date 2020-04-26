@@ -8,6 +8,7 @@ const {
   PAIR_EDIT,
   TRANSLATE_ONE,
   LOG_USER_ACTION,
+  LOG_MATCHES,
   USER_PROGRESS_GET_TWENTY_FOUR,
   USER_WORD_FLAG,
   DICT_GET_TOTALWORDS,
@@ -300,7 +301,13 @@ const getMoveSpeed = async (username) => {
   });
 };
 
-const setMoveSpeed = async (username, fromLanguage, toLanguage, moveSpeed) => {
+const setMoveSpeedAndPositions = async (
+  username,
+  fromLanguage,
+  toLanguage,
+  moveSpeed,
+  positions
+) => {
   return User.updateOne(
     { username: username },
     {
@@ -309,6 +316,7 @@ const setMoveSpeed = async (username, fromLanguage, toLanguage, moveSpeed) => {
         fromLanguage: fromLanguage,
         toLanguage: toLanguage,
       },
+      positions,
     },
     (err, suc) => {
       if (err) {
@@ -411,6 +419,10 @@ app.post("/get", async (req, res) => {
   console.log("toLanguage", toLanguage);
   console.log("position", position);
 
+  if (isNaN(position)) {
+    position = 100;
+  }
+
   const dict = await dictGetTotalWords(fromLanguage, toLanguage);
   DICT_SIZE = dict.totalWords;
 
@@ -479,7 +491,7 @@ app.post("/get", async (req, res) => {
         console.log("foundMore err");
         res.status(500).send("PAIR_FIND_ERR");
       } else {
-        console.log("found", found);
+        // console.log("found", found);
         // response.push({
         //   id: found.id,
         //   word: found.word,
@@ -522,7 +534,7 @@ app.post("/get", async (req, res) => {
           };
         });
 
-        console.log("found enahnced", response);
+        // console.log("found enahnced", response);
 
         let noData = false;
         if (response && Array.isArray(response) && response.length === 0) {
@@ -1251,120 +1263,168 @@ app.post(LOG_USER_ACTION, async (req, res) => {
 
     console.log("LOG_SUCCESS");
 
-    const dict = await dictGetTotalWords(fromLanguage, toLanguage);
-    DICT_SIZE = dict.totalWords;
-
-    const user = await getMoveSpeed(username);
-    console.log("move speed", user);
-    MOVE_SPEED = 250;
-    if (
-      user.moveSpeed &&
-      Array.isArray(user.moveSpeed) &&
-      user.moveSpeed.length
-    ) {
-      const skus = user.moveSpeed.find(
-        (m) => m.fromLanguage === fromLanguage && m.toLanguage === m.toLanguage
-      );
-      if (skus) {
-        MOVE_SPEED = skus.moveSpeed;
-      }
-    }
-
-    console.log(">>>success", success, position, MOVE_SPEED);
-    if (success) {
-      newPosition = position + Math.floor(MOVE_SPEED * UP * Math.random());
-    } else {
-      newPosition = position - Math.floor(MOVE_SPEED * DOWN * Math.random());
-    }
-
-    console.log("DICT_SIZE", DICT_SIZE);
-    newPosition = Math.max(0, Math.min(DICT_SIZE, newPosition));
-    console.log("newPosition", newPosition);
-    let positions = []; //positions is array of objects {position, fromLanguage, toLanguage}
-    try {
-      positionsA = await User.findOne(
-        { username: username },
-
-        (err, positions) => {
-          if (err) {
-            console.log("error getting user positions");
-            res.send("error getting user positions");
-          } else {
-            return positions;
-          }
-        }
-      );
-      //   console.log("User find One yes", positionsA);
-      positions = positionsA.positions;
-    } catch (e) {
-      console.log("catch e", e);
-      positions = [
-        {
-          fromLanguage: fromLanguage,
-          toLanguage: toLanguage,
-          position: newPosition,
-        },
-      ];
-    }
-
-    console.log("positions awaited", positions);
-
-    if (!positions) {
-      positions = [
-        {
-          fromLanguage: fromLanguage,
-          toLanguage: toLanguage,
-          position: newPosition,
-        },
-      ];
-    }
-
-    if (
-      !positions.find((p) => {
-        return p.fromLanguage === fromLanguage && p.toLanguage === toLanguage;
-      })
-    ) {
-      positions.push({
-        fromLanguage: fromLanguage,
-        toLanguage: toLanguage,
-        position: newPosition,
-      });
-    } else {
-      positions.forEach((p) => {
-        if (p.fromLanguage === fromLanguage && p.toLanguage === toLanguage) {
-          p.position = newPosition;
-        }
-      });
-    }
-
-    console.log("Updated positions ", positions);
-    //teraz mi treba vratit pozicie na FE a updatnut to tam
-    await User.updateOne(
-      { username: username },
-      { positions: positions },
-      (err, suc) => {
-        if (err) {
-          console.log("err", err);
-          res.send("error updating user positions");
-        } else {
-          console.log("positions updated successfully");
-          return;
-          //res.send("userSettings_TO_SUCCESS");
-        }
-      }
+    const { newPosition, newMoveSpeed } = await calculatePosition(
+      username,
+      fromLanguage,
+      toLanguage,
+      success,
+      position
     );
 
-    const newMoveSpeed = Math.max(10, MOVE_SPEED - 10);
+    console.log("newPosition:", newPosition, newMoveSpeed);
 
-    setMoveSpeed(username, fromLanguage, toLanguage, newMoveSpeed);
-
-    console.log("sending positions", positions);
     res.status(200).send({ position: newPosition, moveSpeed: newMoveSpeed });
   } catch (e) {
     console.log("error", e);
     res.status(500).send("LOG_FAIL");
   }
 });
+
+app.post(LOG_MATCHES, async (req, res) => {
+  const username = req.body.username;
+  const position = req.body.position;
+  const success = req.body.success;
+  const fromLanguage = req.body.fromLanguage;
+  const toLanguage = req.body.toLanguage;
+
+  const { newPosition, newMoveSpeed } = await calculatePosition(
+    username,
+    fromLanguage,
+    toLanguage,
+    success,
+    position
+  );
+
+  res.status(200).send({ position: newPosition, moveSpeed: newMoveSpeed });
+});
+
+calculatePosition = async (
+  username,
+  fromLanguage,
+  toLanguage,
+  success,
+  position
+) => {
+  const dict = await dictGetTotalWords(fromLanguage, toLanguage);
+  DICT_SIZE = dict.totalWords;
+
+  const user = await getMoveSpeed(username);
+  console.log("move speed", user);
+  MOVE_SPEED = 250;
+  if (
+    user.moveSpeed &&
+    Array.isArray(user.moveSpeed) &&
+    user.moveSpeed.length
+  ) {
+    const skus = user.moveSpeed.find(
+      (m) => m.fromLanguage === fromLanguage && m.toLanguage === m.toLanguage
+    );
+    if (skus) {
+      MOVE_SPEED = skus.moveSpeed;
+    }
+  }
+
+  console.log(">>>success", success, position, MOVE_SPEED);
+  if (success) {
+    newPosition = position + Math.floor(MOVE_SPEED * UP * Math.random());
+  } else {
+    newPosition = position - Math.floor(MOVE_SPEED * DOWN * Math.random());
+  }
+
+  console.log("DICT_SIZE", DICT_SIZE);
+  newPosition = Math.max(0, Math.min(DICT_SIZE, newPosition));
+  console.log("newPosition", newPosition);
+  if (isNaN(newPosition)) {
+    newPosition = 100;
+  }
+  let positions = []; //positions is array of objects {position, fromLanguage, toLanguage}
+  try {
+    positionsA = await User.findOne(
+      { username: username },
+
+      (err, positions) => {
+        if (err) {
+          console.log("error getting user positions");
+          res.send("error getting user positions");
+        } else {
+          return positions;
+        }
+      }
+    );
+    //   console.log("User find One yes", positionsA);
+    positions = positionsA.positions;
+  } catch (e) {
+    console.log("catch e", e);
+    positions = [
+      {
+        fromLanguage: fromLanguage,
+        toLanguage: toLanguage,
+        position: newPosition,
+      },
+    ];
+  }
+
+  console.log("positions awaited", positions);
+
+  if (!positions) {
+    positions = [
+      {
+        fromLanguage: fromLanguage,
+        toLanguage: toLanguage,
+        position: newPosition,
+      },
+    ];
+  }
+
+  if (
+    !positions.find((p) => {
+      return p.fromLanguage === fromLanguage && p.toLanguage === toLanguage;
+    })
+  ) {
+    positions.push({
+      fromLanguage: fromLanguage,
+      toLanguage: toLanguage,
+      position: newPosition,
+    });
+  } else {
+    positions.forEach((p) => {
+      if (p.fromLanguage === fromLanguage && p.toLanguage === toLanguage) {
+        p.position = newPosition;
+      }
+    });
+  }
+
+  console.log("Updated positions ", positions);
+  //teraz mi treba vratit pozicie na FE a updatnut to tam
+  //   await User.updateOne(
+  //     { username: username },
+  //     { positions: positions },
+  //     (err, suc) => {
+  //       if (err) {
+  //         console.log("err", err);
+  //         res.send("error updating user positions");
+  //       } else {
+  //         console.log("positions updated successfully");
+  //         return;
+  //         //res.send("userSettings_TO_SUCCESS");
+  //       }
+  //     }
+  //   );
+
+  const newMoveSpeed = Math.max(10, MOVE_SPEED - 10);
+
+  setMoveSpeedAndPositions(
+    username,
+    fromLanguage,
+    toLanguage,
+    newMoveSpeed,
+    positions
+  );
+
+  console.log("sending return", newPosition);
+
+  return { newPosition: newPosition, newMoveSpeed: newMoveSpeed };
+};
 
 app.post(USER_PROGRESS_GET_TWENTY_FOUR, (req, res) => {
   var startTime = process.hrtime();
