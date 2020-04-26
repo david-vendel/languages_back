@@ -119,44 +119,39 @@ app.post("/login", (req, res) => {
   // console.log("login req", req);
   const login = req.body;
   // console.log("login", login, typeof login);
-  User.find(
-    { username: login.username, password: login.password },
-    (err, answer) => {
-      if (err) {
-        console.log("login database lookup error");
-      } else {
-        console.log("answer:", answer[0], typeof answer);
-        if (answer[0]) {
-          //authorized
-          current = login.username;
-          console.log("current user:", current);
-          const millis = Date.now();
-          const seconds = Math.floor(millis / 1000);
-          const random = Math.random();
-          const userToken = Math.floor(seconds * random);
-          User.updateOne(
-            { username: login.username },
-            { auth: userToken },
-            (err, res) => {
-              if (err) {
-                console.log("err", err);
-              } else {
-                console.log("res", res);
-              }
-            }
-          );
+  const username = login.username ? login.username : "anonym";
+  const password = login.password ? login.password : "anonym";
+  User.find({ username, password }, (err, answer) => {
+    if (err) {
+      console.log("login database lookup error");
+    } else {
+      console.log("answer:", answer[0], typeof answer);
+      if (answer[0]) {
+        //authorized
+        current = login.username;
+        console.log("current user:", current);
+        const millis = Date.now();
+        const seconds = Math.floor(millis / 1000);
+        const random = Math.random();
+        const userToken = Math.floor(seconds * random);
+        User.updateOne({ username }, { auth: userToken }, (err, res) => {
+          if (err) {
+            console.log("err", err);
+          } else {
+            console.log("res", res);
+          }
+        });
 
-          res.json({ success: true, userToken });
-        } else {
-          console.log("login failed");
-          //unauthorized
-          res
-            .status(401) // HTTP status 404: NotFound
-            .send("Login Failed");
-        }
+        res.json({ success: true, userToken });
+      } else {
+        console.log("login failed");
+        //unauthorized
+        res
+          .status(401) // HTTP status 404: NotFound
+          .send("Login Failed");
       }
     }
-  );
+  });
 });
 
 app.post("/signup", (req, res) => {
