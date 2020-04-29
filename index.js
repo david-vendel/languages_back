@@ -4,6 +4,16 @@ const fs = require("fs");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 const fetch = require("node-fetch");
+require("dotenv").config();
+const Dictionary = require("oxford-dictionary");
+var config = {
+  app_id: process.env.OXFORD_APP_ID,
+  app_key: process.env.OXFORD_APP_KEY,
+  source_lang: "en-us",
+};
+console.log("config", config);
+var dict = new Dictionary(config);
+
 const {
   PAIR_EDIT,
   TRANSLATE_ONE,
@@ -14,7 +24,6 @@ const {
   DICT_GET_TOTALWORDS,
   ALL_TRANSLATIONS_GET,
 } = require("./endpoints");
-require("dotenv").config();
 const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY;
 
 // let DICT_SIZE = 999;
@@ -59,6 +68,7 @@ let Pair = require("./models/pair.js");
 let Log = require("./models/log.js");
 let Translation = require("./models/translation.js");
 let Dict = require("./models/dict.js");
+let Oxford = require("./models/oxford.js");
 
 function parseHrtimeToSeconds(hrtime) {
   var seconds = (hrtime[0] + hrtime[1] / 1e9).toFixed(3);
@@ -1024,6 +1034,72 @@ app.post("/frequencies/translate", async (req, res) => {
       }
     );
   }, 1000);
+});
+
+app.post("/oxford/scrap", async (req, res) => {
+  const frequencies = await Frequent.find({}, (err, frequencies) => {
+    if (err) {
+      console.log("err", err);
+    } else {
+      console.log("frequencies", frequencies);
+      return frequencies;
+      //res.send("TRANSLATED");
+    }
+  });
+
+  console.log("frequencies", frequencies);
+
+  let id = 0;
+  for (let i = 0; i < frequencies.length; i++) {
+    setTimeout(() => {
+      const word = frequencies[i].word;
+      // stringify JSON object to see full structure in console log
+      console.log(">>", word);
+      Oxford.find({ word: word }, (err, found) => {
+        if (err) {
+          console.log("err", err);
+        }
+        let toSend = "";
+
+        if (Array.isArray(found) && found.length === 0) {
+          console.log("Oxford query");
+          try {
+            var lookup = dict.find(word.trim());
+            lookup
+              .then(function (lres) {
+                // stringify JSON object to see full structure in console log
+                //   console.log(JSON.stringify(lres, null, 4));
+                console.log("Oxford create for ", word);
+                Oxford.create({
+                  word: word,
+                  data: JSON.stringify(lres),
+                });
+                toSend = JSON.stringify(lres);
+              })
+              .catch((e) => {
+                console.log("Oxford query error", e);
+                if (e.includes("failed")) {
+                  console.log("auth failed");
+                } else {
+                  console.log("Oxfor create for ", word, " empty");
+                  Oxford.create({
+                    word: word,
+                    data: e,
+                  });
+                }
+              });
+          } catch (e) {
+            console.log("Oxford err", e);
+          }
+        } else {
+          console.log("found so not querying: ");
+          toSend = found[0];
+        }
+
+        //   res.send(JSON.stringify(toSend, null, 4));
+      });
+    }, 1111 * i);
+  }
 });
 
 app.post(PAIR_EDIT, (req, res) => {
