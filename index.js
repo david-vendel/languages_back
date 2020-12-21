@@ -450,10 +450,13 @@ app.post("/get", async (req, res) => {
   console.log("flaggedIds", flaggedIds);
   console.log(" SPREAD, DICT_SIZE, position ", SPREAD, DICT_SIZE, position);
 
-  while (randomsArr.length < count) {
+  let cycleLimiter2 = 0;
+
+  while (cycleLimiter2 < 50 && randomsArr.length < count) {
+    cycleLimiter2++;
     cycleLimiter = 0;
     let randomCandidate = -1;
-    while (cycleLimiter < 50 && (
+    while (cycleLimiter < 40 && (
       randomCandidate === -1 ||
         (randomsArr.includes(randomCandidate.toString(10)) ||
           flaggedIds.includes(randomCandidate)))
@@ -478,6 +481,9 @@ app.post("/get", async (req, res) => {
     console.log("randomCandidate.toString(10)", randomCandidate.toString(10));
   }
 
+  if (randomsArr.length === 0) {
+      randomsArr = [0,1,2,3,4,5,6,7,8,9,10,11,12]
+  }
   console.log("randomsArr", randomsArr);
 
   //todo need to get more words
