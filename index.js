@@ -127,7 +127,7 @@ app.post("/user-logged", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
-  console.log("login req", req);
+  console.log("login");
   const login = req.body;
   // console.log("login", login, typeof login);
   const username = login.username ? login.username : "anonym";
@@ -430,7 +430,7 @@ app.post("/get", async (req, res) => {
   }
 
   const dict = await dictGetTotalWords(fromLanguage, toLanguage);
-  DICT_SIZE = dict.totalWords;
+  DICT_SIZE = dict?.totalWords;
 
   console.log("Start, DICT_SIZE:", DICT_SIZE);
   position = Math.min(position, DICT_SIZE - SPREAD);
@@ -453,17 +453,17 @@ app.post("/get", async (req, res) => {
   while (randomsArr.length < count) {
     cycleLimiter = 0;
     let randomCandidate = -1;
-    while (
+    while (cycleLimiter < 50 && (
       randomCandidate === -1 ||
-      (cycleLimiter < 50 &&
         (randomsArr.includes(randomCandidate.toString(10)) ||
           flaggedIds.includes(randomCandidate)))
     ) {
+        cycleLimiter = cycleLimiter + 1;
       if (cycleLimiter >= 49) {
         console.log("CYCLE LIMITED", cycleLimiter);
         position--;
       }
-      cycleLimiter += 1;
+      
       randomCandidate = Math.min(
         Math.max(0, position + Math.floor(Math.random() * SPREAD) - SPREAD / 2),
         DICT_SIZE
@@ -1378,7 +1378,7 @@ calculatePosition = async (
   position
 ) => {
   const dict = await dictGetTotalWords(fromLanguage, toLanguage);
-  DICT_SIZE = dict.totalWords;
+  DICT_SIZE = dict?.totalWords ? dict?.totalWords : 0;
 
   const user = await getMoveSpeed(username);
   console.log("move speed", user);

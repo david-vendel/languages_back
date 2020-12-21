@@ -16,8 +16,9 @@ def isEnglish(s):
 chrome_options = Options()
 chrome_options.add_argument("--disable-infobars")
 #driver = webdriver.Chrome('./assets/chromedriver')  # Optional argument, if not specified will search path.
-driver = webdriver.Chrome('./../assets/chromedriver', chrome_options=chrome_options)
-          
+# driver = webdriver.Chrome('./chromedriver', chrome_options=chrome_options)
+driver = webdriver.Chrome('./../assets/chromedriver/chromedriver.exe')  # Optional argument, if not specified will search path.
+
 driver.get('https://en.wikipedia.org/wiki/Main_Page')
           
 
