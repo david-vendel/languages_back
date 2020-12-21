@@ -101,6 +101,7 @@ const allTranslations = require("./routes/all-translations.js");
 app.use("/all-translations", allTranslations);
 
 app.get("/", (req, res) => {
+    console.log("hello")
   res.send("Hello World");
   // res.sendFile(path.join(__dirname, "static", "index.html"));
 });
@@ -126,7 +127,7 @@ app.post("/user-logged", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
-  // console.log("login req", req);
+  console.log("login req", req);
   const login = req.body;
   // console.log("login", login, typeof login);
   const username = login.username ? login.username : "anonym";
@@ -349,7 +350,7 @@ const dictGetTotalWords = async (fromLanguage, toLanguage) => {
   );
 
   console.log("found>>", found);
-  console.log("found.tota", found.totalWords);
+  console.log("found.tota", found?.totalWords);
   return found;
 };
 
