@@ -6,7 +6,7 @@
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "mongoose": "^5.6.8",
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^3.1.1",
     "nodemon": "^1.19.1",
     "oxford-dictionary": "^1.6.0"
   },
